@@ -1,0 +1,27 @@
+# Java and Maven
+target/
+*.class
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Logs and runtime data
+*.log
+data/
+
+# IDE and operating system
+.idea/
+.vscode/
+.DS_Store
+
+# Unwanted project directories in production
+voice-service/spikes/language-id/.venv-spike/
+voice-service/spikes/language-id/.model-cache/
+
