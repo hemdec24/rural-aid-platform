@@ -60,7 +60,7 @@ No frontend implementation is required on Day 1.
 
 `messaging-contracts` will contain shared Java representations of messages exchanged between services. It must not contain service-specific business logic.
 
-JSON Schema or AsyncAPI will eventually act as the language-neutral source of truth so that Java and Python services can produce compatible message representations.
+AsyncAPI will serve as the language-neutral contract for asynchronous service interactions, with message payloads defined using JSON Schema. Java and Python representations will be derived from or validated against these contracts.
 
 ### Day 1 implementation boundary
 

@@ -95,12 +95,13 @@ Each endpoint should return HTTP `200`.
 ## Stop the local stack
 
 Stop and remove the containers and Compose network:
+This preserves named volumes.
 
 ```bash
 docker compose down
 ```
 
-This preserves named volumes. To intentionally delete local volume data as well, run:
+To intentionally delete local volume data as well, run:
 
 ```bash
 docker compose down --volumes
