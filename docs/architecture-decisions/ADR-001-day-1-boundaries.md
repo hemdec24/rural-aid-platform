@@ -104,7 +104,7 @@ Separate PostgreSQL databases are created from Day 1 even though business tables
 
 ### Synchronous voice processing inside the HTTP request
 
-This would require fewer components initially. It was rejected as the target architecture because model execution may be slow, variable or temporarily unavailable. Long-running synchronous requests are more vulnerable to timeouts and client retries.
+This would require fewer components initially. It was rejected as the target architecture because, model execution may be slow, variable or temporarily unavailable. Long-running synchronous requests are more vulnerable to timeouts and client retries.
 
 The Day 1 model spike remains synchronous because it is only a local feasibility experiment, not the production processing design.
 
