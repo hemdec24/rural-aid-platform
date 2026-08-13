@@ -178,3 +178,15 @@ Recorded result:
 ```
 
 This result demonstrates technical feasibility for one natural Telugu recording. It does not establish production accuracy across speakers, dialects, recording conditions or languages.
+
+## Day 2
+### Aid-request Domain documentation under docs/domain/aid-request-domain.md
+Document that captures Domain idea, use case, domain model, domain language,
+aggregate model, other related objects, objects classification, invariants, status transition matrix,
+rejected alternatives and boundary decisions.
+
+### AidRequest domain model implementation
+Implementation of Domain model as described in the domain document
+
+### AidRequestTest
+Test cases pertaining to AidRequest domain model implementation
