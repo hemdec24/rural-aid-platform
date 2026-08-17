@@ -20,6 +20,58 @@ public final class AidRequest {
             NeedCategory needCategory,
             Priority priority
     ) {
+        this (
+                id,
+                location,
+                needCategory,
+                priority,
+                AidRequestStatus.RECEIVED,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+    }
+
+    public static AidRequest restore(
+            AidRequestId id,
+            Location location,
+            NeedCategory needCategory,
+            Priority priority,
+            AidRequestStatus status,
+            ReservationId reservationId,
+            ReservationFailureReason reservationFailureReason,
+            DispatchDetails dispatchDetails,
+            DeliveryDetails deliveryDetails,
+            CancellationReason cancellationReason
+    ) {
+        return new AidRequest(
+                id,
+                location,
+                needCategory,
+                priority,
+                status,
+                reservationId,
+                reservationFailureReason,
+                dispatchDetails,
+                deliveryDetails,
+                cancellationReason
+        );
+    }
+
+    private AidRequest(
+            AidRequestId id,
+            Location location,
+            NeedCategory needCategory,
+            Priority priority,
+            AidRequestStatus status,
+            ReservationId reservationId,
+            ReservationFailureReason reservationFailureReason,
+            DispatchDetails dispatchDetails,
+            DeliveryDetails deliveryDetails,
+            CancellationReason cancellationReason
+    ) {
         if (id == null) {
             throw new IllegalArgumentException(
                     "Aid request ID must not be null"
@@ -40,12 +92,91 @@ public final class AidRequest {
                     "Priority must not be null"
             );
         }
+        if (status == null) {
+            throw new IllegalArgumentException(
+                    "Aid request status must not be null"
+            );
+        }
 
         this.id = id;
         this.location = location;
         this.needCategory = needCategory;
         this.priority = priority;
-        this.status = AidRequestStatus.RECEIVED;
+        this.status = status;
+        this.reservationId = reservationId;
+        this.reservationFailureReason = reservationFailureReason;
+        this.dispatchDetails = dispatchDetails;
+        this.deliveryDetails = deliveryDetails;
+        this.cancellationReason = cancellationReason;
+
+        validateRestoredState();
+    }
+
+    private void validateRestoredState() {
+        boolean valid = switch (status) {
+            case RECEIVED,
+                 REQUIRES_REVIEW,
+                 VALIDATED,
+                 MATCH_PENDING ->
+                    reservationId == null
+                            && reservationFailureReason == null
+                            && dispatchDetails == null
+                            && deliveryDetails == null
+                            && cancellationReason == null;
+
+            case RESERVATION_FAILED ->
+                    reservationId == null
+                            && reservationFailureReason != null
+                            && dispatchDetails == null
+                            && deliveryDetails == null
+                            && cancellationReason == null;
+
+            case RESERVED ->
+                    reservationId != null
+                            && reservationFailureReason == null
+                            && dispatchDetails == null
+                            && deliveryDetails == null
+                            && cancellationReason == null;
+
+            case DISPATCHED ->
+                    reservationId != null
+                            && reservationFailureReason == null
+                            && dispatchDetails != null
+                            && deliveryDetails == null
+                            && cancellationReason == null;
+
+            case DELIVERED,
+                 COMPLETED ->
+                    reservationId != null
+                            && reservationFailureReason == null
+                            && dispatchDetails != null
+                            && deliveryDetails != null
+                            && cancellationReason == null;
+
+            case CANCELLED ->
+                    dispatchDetails == null
+                            && deliveryDetails == null
+                            && cancellationReason != null
+                            && (
+                            reservationId == null
+                                    || reservationFailureReason == null
+                    );
+        };
+
+        if (!valid) {
+            throw new IllegalArgumentException(
+                    "Stored aid request facts are inconsistent with status "
+                            + status
+            );
+        }
+
+        if (deliveryDetails != null
+                && deliveryDetails.deliveredAt()
+                .isBefore(dispatchDetails.dispatchedAt())) {
+            throw new IllegalArgumentException(
+                    "Delivery time must not be before dispatch time"
+            );
+        }
     }
 
     public AidRequestId id() {

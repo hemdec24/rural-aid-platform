@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+            http://www.liquibase.org/xml/ns/dbchangelog
+            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="001-create-aid-requests" author="hem">
+
+        <createTable tableName="aid_requests">
+            <column name="request_id" type="TEXT">
+                <constraints
+                        nullable="false"
+                        primaryKey="true"
+                        primaryKeyName="pk_aid_requests"/>
+            </column>
+
+            <column name="latitude" type="DOUBLE PRECISION">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="longitude" type="DOUBLE PRECISION">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="need_category" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="priority" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="status" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="reservation_id" type="TEXT"/>
+
+            <column name="reservation_failure_reason" type="TEXT"/>
+
+            <column name="dispatch_responder_reference" type="TEXT"/>
+
+            <column
+                    name="dispatched_at"
+                    type="TIMESTAMP WITH TIME ZONE"/>
+
+            <column name="delivery_confirmation_reference" type="TEXT"/>
+
+            <column
+                    name="delivered_at"
+                    type="TIMESTAMP WITH TIME ZONE"/>
+
+            <column name="cancellation_reason" type="TEXT"/>
+
+            <column
+                    name="version"
+                    type="BIGINT"
+                    defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+
+            <column
+                    name="created_at"
+                    type="TIMESTAMP WITH TIME ZONE"
+                    defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <sql>
+            <![CDATA[
+            ALTER TABLE aid_requests
+                ADD CONSTRAINT ck_aid_requests_request_id_not_blank
+                    CHECK (btrim(request_id) <> ''),
+
+                ADD CONSTRAINT ck_aid_requests_latitude
+                    CHECK (latitude BETWEEN -90.0 AND 90.0),
+
+                ADD CONSTRAINT ck_aid_requests_longitude
+                    CHECK (longitude BETWEEN -180.0 AND 180.0),
+
+                ADD CONSTRAINT ck_aid_requests_need_category
+                    CHECK (need_category IN (
+                        'MEDICAL',
+                        'FOOD',
+                        'SHELTER',
+                        'WATER'
+                    )),
+
+                ADD CONSTRAINT ck_aid_requests_priority
+                    CHECK (priority IN (
+                        'STANDARD',
+                        'URGENT'
+                    )),
+
+                ADD CONSTRAINT ck_aid_requests_status
+                    CHECK (status IN (
+                        'RECEIVED',
+                        'REQUIRES_REVIEW',
+                        'VALIDATED',
+                        'MATCH_PENDING',
+                        'RESERVATION_FAILED',
+                        'RESERVED',
+                        'DISPATCHED',
+                        'DELIVERED',
+                        'COMPLETED',
+                        'CANCELLED'
+                    )),
+
+                ADD CONSTRAINT ck_aid_requests_version
+                    CHECK (version >= 0),
+
+                ADD CONSTRAINT ck_aid_requests_reservation_id_not_blank
+                    CHECK (
+                        reservation_id IS NULL
+                        OR btrim(reservation_id) <> ''
+                    ),
+
+                ADD CONSTRAINT ck_aid_requests_failure_reason_not_blank
+                    CHECK (
+                        reservation_failure_reason IS NULL
+                        OR btrim(reservation_failure_reason) <> ''
+                    ),
+
+                ADD CONSTRAINT ck_aid_requests_dispatch_reference_not_blank
+                    CHECK (
+                        dispatch_responder_reference IS NULL
+                        OR btrim(dispatch_responder_reference) <> ''
+                    ),
+
+                ADD CONSTRAINT ck_aid_requests_delivery_reference_not_blank
+                    CHECK (
+                        delivery_confirmation_reference IS NULL
+                        OR btrim(delivery_confirmation_reference) <> ''
+                    ),
+
+                ADD CONSTRAINT ck_aid_requests_cancellation_reason_not_blank
+                    CHECK (
+                        cancellation_reason IS NULL
+                        OR btrim(cancellation_reason) <> ''
+                    );
+            ]]>
+        </sql>
+
+        <sql>
+            <![CDATA[
+            ALTER TABLE aid_requests
+                ADD CONSTRAINT ck_aid_requests_dispatch_details_complete
+                    CHECK (
+                        (dispatch_responder_reference IS NULL)
+                            = (dispatched_at IS NULL)
+                        ),
+
+                ADD CONSTRAINT ck_aid_requests_delivery_details_complete
+                    CHECK (
+                        (delivery_confirmation_reference IS NULL)
+                        = (delivered_at IS NULL)
+                    ),
+
+                ADD CONSTRAINT ck_aid_requests_delivery_time
+                    CHECK (
+                        delivered_at IS NULL
+                        OR dispatched_at IS NULL
+                        OR delivered_at >= dispatched_at
+                    ),
+
+                ADD CONSTRAINT ck_aid_requests_reservation_allowed_state
+                    CHECK (
+                        reservation_id IS NULL
+                        OR status IN (
+                            'RESERVED',
+                            'DISPATCHED',
+                            'DELIVERED',
+                            'COMPLETED',
+                            'CANCELLED'
+                        )
+                    ),
+
+                ADD CONSTRAINT ck_aid_requests_reservation_required_state
+                    CHECK (
+                        status NOT IN (
+                            'RESERVED',
+                            'DISPATCHED',
+                            'DELIVERED',
+                            'COMPLETED'
+                        )
+                        OR reservation_id IS NOT NULL
+                    ),
+
+                ADD CONSTRAINT ck_aid_requests_failure_allowed_state
+                    CHECK (
+                        reservation_failure_reason IS NULL
+                        OR status IN (
+                            'RESERVATION_FAILED',
+                            'CANCELLED'
+                        )
+                    ),
+
+                ADD CONSTRAINT ck_aid_requests_failure_required_state
+                    CHECK (
+                        status <> 'RESERVATION_FAILED'
+                        OR reservation_failure_reason IS NOT NULL
+                    ),
+
+                ADD CONSTRAINT ck_aid_requests_reservation_outcome_exclusive
+                    CHECK (
+                        reservation_id IS NULL
+                        OR reservation_failure_reason IS NULL
+                    ),
+
+                ADD CONSTRAINT ck_aid_requests_dispatch_state
+                    CHECK (
+                        (status IN (
+                            'DISPATCHED',
+                            'DELIVERED',
+                            'COMPLETED'
+                        ))
+                        = (dispatch_responder_reference IS NOT NULL)
+                    ),
+
+                ADD CONSTRAINT ck_aid_requests_delivery_state
+                    CHECK (
+                        (status IN (
+                            'DELIVERED',
+                            'COMPLETED'
+                        ))
+                        = (delivery_confirmation_reference IS NOT NULL)
+                    ),
+
+                ADD CONSTRAINT ck_aid_requests_cancellation_state
+                    CHECK (
+                        (status = 'CANCELLED')
+                        = (cancellation_reason IS NOT NULL)
+                    );
+            ]]>
+        </sql>
+
+        <createIndex
+                indexName="idx_aid_requests_created_request"
+                tableName="aid_requests">
+            <column name="created_at" descending="true"/>
+            <column name="request_id" descending="true"/>
+        </createIndex>
+
+        <rollback>
+            <dropTable tableName="aid_requests"/>
+        </rollback>
+
+    </changeSet>
+
+</databaseChangeLog>
