@@ -24,6 +24,7 @@
         <revision>0.1.0-SNAPSHOT</revision>
 
         <dropwizard.version>5.0.2</dropwizard.version>
+        <postgresql.version>42.7.13</postgresql.version>
 
         <junit.version>5.14.4</junit.version>
         <mockito.version>5.23.0</mockito.version>

@@ -1,5 +1,15 @@
 serviceName: aid-workflow-service
 
+database:
+  driverClass: org.postgresql.Driver
+  user: rural_aid
+  password: rural_aid_local
+  url: jdbc:postgresql://postgres:5432/aid_workflow
+  validationQuery: "SELECT 1"
+  initialSize: 2
+  minSize: 2
+  maxSize: 8
+
 server:
   applicationConnectors:
     - type: http

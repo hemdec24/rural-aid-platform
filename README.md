@@ -190,3 +190,56 @@ Implementation of Domain model as described in the domain document
 
 ### AidRequestTest
 Test cases pertaining to AidRequest domain model implementation
+
+## Day 3 - AidRequest Persistence, Application service and API Resource implementation
+
+### Persistence design
+Documented Table, Columns, AidRequest Aggregate properties to Column mapping, Keys, Constraints  in docs/persistence/aid-request-schema.md
+
+### PostgreSQL Schema and Liquibase Migration
+
+* Added the `aid_requests` table with columns for aggregate state, optional lifecycle details, optimistic versioning, and creation time.
+* Database constraints enforce valid enum values, geographic coordinates, lifecycle consistency, and nonblank optional identifiers.
+* Added a deterministic listing index on `(created_at DESC, request_id DESC)` and verified the migration directly in PostgreSQL.
+
+### JDBI Persistence Adapter
+
+* Implemented `AidRequestRowMapper` to restore database rows into a valid `AidRequest` aggregate and wrap it in `VersionedAidRequest`.
+* Implemented `JdbiAidRequestRepository` for insertion, lookup by ID, optimistic updates, and cursor-based listing.
+* Persistence maps directly between SQL columns and domain values without introducing a separate persistence-model package.
+
+### Optimistic Concurrency Control
+
+* Updates require the caller’s expected version to match the version currently stored in PostgreSQL.
+* A single atomic `UPDATE ... WHERE version = :expectedVersion RETURNING *` increments the version and returns the winning state.
+* Zero returned rows produce an explicit version conflict, preventing stale clients from overwriting newer changes.
+
+### Deterministic Cursor Pagination
+
+* Listing uses a typed cursor containing `createdAt` and `requestId`, matching the database sort order.
+* Requests are ordered by `created_at DESC, request_id DESC`, with both fields providing a stable tie-breaker.
+* Integration tests verify deterministic traversal without duplicated requests across pages.
+
+### Application-Service Boundary
+
+* Added `AidRequestApplicationService` as the use-case boundary between HTTP resources and persistence.
+* It coordinates ID generation, creation, retrieval, listing, concurrency checks, domain commands, and repository updates.
+* Supported coordinator commands include location correction, validation, review decisions, and cancellation.
+
+### REST API and DTO Mapping
+
+* Added Jersey endpoints for creating, reading, listing, and issuing commands against aid requests.
+* Dedicated request and response DTOs keep JSON contracts separate from domain aggregates and application models.
+* `AidRequestApiMapper` converts API values into domain objects and maps stored aggregates into stable JSON responses.
+
+### HTTP Failure Contracts
+
+* Added exception mappers that translate application and domain failures into structured `ApiError` responses.
+* Missing requests return `404`, invalid domain input returns `400`, and state or version conflicts return `409`.
+* A stale command was verified through Docker to return `AID_REQUEST_VERSION_CONFLICT` without modifying stored state.
+
+### Runtime and Integration Evidence
+
+* Wired JDBI, the repository, application service, Jersey resource, and exception mappers in the Dropwizard composition root.
+* Verified create, read, ordered list, and validation flows through Docker against the real PostgreSQL container.
+* The final root build passed all modules with 18 tests, including PostgreSQL round-trip, concurrency, and cursor integration tests.
