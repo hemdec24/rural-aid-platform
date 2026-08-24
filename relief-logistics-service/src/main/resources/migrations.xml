@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+            http://www.liquibase.org/xml/ns/dbchangelog
+            https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="001-create-inventory-foundation" author="hem">
+
+        <createTable tableName="inventory_items">
+            <column name="inventory_item_id" type="UUID">
+                <constraints
+                        primaryKey="true"
+                        primaryKeyName="pk_inventory_items"
+                        nullable="false"/>
+            </column>
+
+            <column name="resource_type" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="available_quantity" type="INTEGER">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createTable tableName="inventory_reservations">
+            <column name="reservation_id" type="UUID">
+                <constraints
+                        primaryKey="true"
+                        primaryKeyName="pk_inventory_reservations"
+                        nullable="false"/>
+            </column>
+
+            <column name="aid_request_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="inventory_item_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="quantity" type="INTEGER">
+                <constraints nullable="false"/>
+            </column>
+
+            <column
+                    name="created_at"
+                    type="TIMESTAMP WITH TIME ZONE"
+                    defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addForeignKeyConstraint
+                constraintName="fk_inventory_reservations_inventory_item"
+                baseTableName="inventory_reservations"
+                baseColumnNames="inventory_item_id"
+                referencedTableName="inventory_items"
+                referencedColumnNames="inventory_item_id"
+                onDelete="RESTRICT"/>
+
+        <sql><![CDATA[
+            ALTER TABLE inventory_items
+                ADD CONSTRAINT chk_inventory_items_available_nonnegative
+                    CHECK (available_quantity >= 0);
+
+            ALTER TABLE inventory_reservations
+                ADD CONSTRAINT chk_inventory_reservations_quantity_positive
+                    CHECK (quantity > 0);
+            ]]></sql>
+
+        <rollback>
+            <dropTable tableName="inventory_reservations"/>
+            <dropTable tableName="inventory_items"/>
+        </rollback>
+
+    </changeSet>
+
+    <changeSet
+            id="002-create-inventory-reservation-operations"
+            author="hem">
+
+        <createTable tableName="inventory_reservation_operations">
+            <column name="reservation_id" type="UUID">
+                <constraints
+                        nullable="false"
+                        primaryKey="true"
+                        primaryKeyName="pk_inventory_reservation_operations"/>
+            </column>
+
+            <column name="request_fingerprint" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="operation_status" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="outcome" type="TEXT"/>
+
+            <column
+                    name="created_at"
+                    type="TIMESTAMP WITH TIME ZONE"
+                    defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+
+            <column
+                    name="completed_at"
+                    type="TIMESTAMP WITH TIME ZONE"/>
+        </createTable>
+
+        <sql>
+            ALTER TABLE inventory_reservation_operations
+                ADD CONSTRAINT chk_inventory_reservation_operations_fingerprint
+                    CHECK (
+                        request_fingerprint ~ '^[0-9a-f]{64}$'
+                );
+
+            ALTER TABLE inventory_reservation_operations
+                ADD CONSTRAINT chk_inventory_reservation_operations_status
+                    CHECK (
+                        operation_status IN ('IN_PROGRESS', 'COMPLETED')
+                        );
+
+            ALTER TABLE inventory_reservation_operations
+                ADD CONSTRAINT chk_inventory_reservation_operations_outcome
+                    CHECK (
+                        outcome IS NULL
+                            OR outcome IN ('RESERVED', 'UNAVAILABLE', 'NOT_FOUND')
+                        );
+
+            ALTER TABLE inventory_reservation_operations
+                ADD CONSTRAINT chk_inventory_reservation_operations_completion
+                    CHECK (
+                        (
+                            operation_status = 'IN_PROGRESS'
+                                AND outcome IS NULL
+                                AND completed_at IS NULL
+                            )
+                            OR
+                        (
+                            operation_status = 'COMPLETED'
+                                AND outcome IS NOT NULL
+                                AND completed_at IS NOT NULL
+                            )
+                        );
+        </sql>
+
+        <rollback>
+            <dropTable tableName="inventory_reservation_operations"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet
+            id="003-correct-reservation-operation-outcomes"
+            author="hem">
+
+        <sql><![CDATA[
+            ALTER TABLE inventory_reservation_operations
+            DROP CONSTRAINT
+                chk_inventory_reservation_operations_outcome;
+
+            ALTER TABLE inventory_reservation_operations
+                ADD CONSTRAINT
+                    chk_inventory_reservation_operations_outcome
+                    CHECK (
+                        outcome IS NULL
+                            OR outcome IN ('RESERVED', 'UNAVAILABLE')
+                        );
+            ]]></sql>
+
+        <rollback>
+            <sql><![CDATA[
+            ALTER TABLE inventory_reservation_operations
+                DROP CONSTRAINT
+                    chk_inventory_reservation_operations_outcome;
+
+            ALTER TABLE inventory_reservation_operations
+                ADD CONSTRAINT
+                    chk_inventory_reservation_operations_outcome
+                CHECK (
+                    outcome IS NULL
+                    OR outcome IN (
+                        'RESERVED',
+                        'UNAVAILABLE',
+                        'NOT_FOUND'
+                    )
+                );
+        ]]></sql>
+        </rollback>
+
+    </changeSet>
+
+</databaseChangeLog>

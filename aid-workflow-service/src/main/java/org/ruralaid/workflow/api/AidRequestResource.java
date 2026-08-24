@@ -18,6 +18,7 @@ import jakarta.ws.rs.core.Response;
 
 import org.ruralaid.workflow.api.model.AidRequestResponse;
 import org.ruralaid.workflow.api.model.CreateAidRequestRequest;
+import org.ruralaid.workflow.api.model.AidRequestApiMapper;
 import org.ruralaid.workflow.application.AidRequestApplicationService;
 import org.ruralaid.workflow.application.model.AidRequestCursor;
 import org.ruralaid.workflow.domain.AidRequestId;
