@@ -243,3 +243,23 @@ Documented Table, Columns, AidRequest Aggregate properties to Column mapping, Ke
 * Wired JDBI, the repository, application service, Jersey resource, and exception mappers in the Dropwizard composition root.
 * Verified create, read, ordered list, and validation flows through Docker against the real PostgreSQL container.
 * The final root build passed all modules with 18 tests, including PostgreSQL round-trip, concurrency, and cursor integration tests.
+
+
+## Day 4 — Race-Safe and Retry-Safe Inventory Reservation
+
+Relief Logistics now reserves inventory through an atomic PostgreSQL
+conditional update, preventing concurrent requests from overdrawing
+available stock. Inventory mutation, reservation creation and the durable
+operation outcome commit in one database transaction.
+
+`reservationId` provides stable operation identity, while a canonical
+request fingerprint detects unsafe identity reuse. Exact retries replay
+the stored outcome without applying another inventory effect.
+
+The API exposes stable `RESERVED`, `INVENTORY_UNAVAILABLE` and
+`RESERVATION_ID_CONFLICT` contracts without leaking database details.
+PostgreSQL integration tests prove rollback, sequential replay, competing
+reservation safety and concurrent exact-retry behavior.
+
+Extended many-writer capacity testing is deferred to final hardening.
+

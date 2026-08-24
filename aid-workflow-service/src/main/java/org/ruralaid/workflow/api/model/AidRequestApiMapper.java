@@ -1,4 +1,4 @@
-package org.ruralaid.workflow.api;
+package org.ruralaid.workflow.api.model;
 
 import org.ruralaid.workflow.api.model.AidRequestResponse;
 import org.ruralaid.workflow.api.model.LocationRequest;
