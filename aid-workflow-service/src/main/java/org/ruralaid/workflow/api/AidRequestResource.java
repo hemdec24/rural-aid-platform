@@ -25,7 +25,9 @@ import org.ruralaid.workflow.domain.AidRequestId;
 import org.ruralaid.workflow.api.model.CancelAidRequestRequest;
 import org.ruralaid.workflow.api.model.CorrectLocationRequest;
 import org.ruralaid.workflow.api.model.ExpectedVersionRequest;
+import org.ruralaid.workflow.api.model.ReserveAidRequestRequest;
 import org.ruralaid.workflow.domain.CancellationReason;
+import org.ruralaid.workflow.domain.InventoryItemId;
 
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
@@ -175,6 +177,36 @@ public final class AidRequestResource {
         return AidRequestApiMapper.toResponse(updatedRequest);
     }
 
+    @POST
+    @Path("/{requestId}/commands/reserve-inventory")
+    public AidRequestResponse reserveInventory(
+            @PathParam("requestId") String requestId,
+            @NotNull @Valid ReserveAidRequestRequest request
+    ) {
+        var updatedRequest = applicationService.reserveInventory(
+                new AidRequestId(requestId),
+                request.expectedVersion(),
+                new InventoryItemId(request.inventoryItemId()),
+                request.quantity()
+        );
+
+        return AidRequestApiMapper.toResponse(updatedRequest);
+    }
+
+    @POST
+    @Path("/{requestId}/commands/retry-reservation")
+    public AidRequestResponse retryReservation(
+            @PathParam("requestId") String requestId,
+            @NotNull @Valid ExpectedVersionRequest request
+    ) {
+        var updatedRequest = applicationService.retryReservation(
+                new AidRequestId(requestId),
+                request.expectedVersion()
+        );
+
+        return AidRequestApiMapper.toResponse(updatedRequest);
+    }
+
     private static Optional<AidRequestCursor> parseCursor(
             String createdAt,
             String requestId
@@ -212,4 +244,3 @@ public final class AidRequestResource {
         }
     }
 }
-

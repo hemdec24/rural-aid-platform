@@ -18,3 +18,7 @@ server:
   adminConnectors:
     - type: http
       port: 8081
+
+logisticsBaseUri: http://relief-logistics-service:8090
+logisticsConnectTimeoutMillis: 2000
+logisticsRequestTimeoutMillis: 5000

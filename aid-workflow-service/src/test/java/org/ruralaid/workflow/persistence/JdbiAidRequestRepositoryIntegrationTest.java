@@ -1,41 +1,54 @@
 package org.ruralaid.workflow.persistence;
 
 import org.jdbi.v3.core.Jdbi;
-import org.ruralaid.workflow.application.model.VersionedAidRequest;
-import org.ruralaid.workflow.application.model.AidRequestCursor;
-import org.ruralaid.workflow.application.exception.AidRequestVersionConflictException;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
+import org.ruralaid.workflow.application.exception.AidRequestVersionConflictException;
+import org.ruralaid.workflow.application.model.AidRequestCursor;
+import org.ruralaid.workflow.application.model.VersionedAidRequest;
 import org.ruralaid.workflow.domain.AidRequest;
 import org.ruralaid.workflow.domain.AidRequestId;
 import org.ruralaid.workflow.domain.AidRequestStatus;
+import org.ruralaid.workflow.domain.CancellationReason;
+import org.ruralaid.workflow.domain.InventoryItemId;
 import org.ruralaid.workflow.domain.Location;
 import org.ruralaid.workflow.domain.NeedCategory;
 import org.ruralaid.workflow.domain.Priority;
+import org.ruralaid.workflow.domain.ReservationFailureReason;
+import org.ruralaid.workflow.domain.ReservationId;
 
-import java.util.UUID;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.BeforeAll;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 final class JdbiAidRequestRepositoryIntegrationTest {
 
     private static Jdbi jdbi;
-
     private static JdbiAidRequestRepository repository;
 
+    @BeforeAll
+    static void setUpDatabaseAccess() {
+        jdbi = createJdbi();
+        repository = new JdbiAidRequestRepository(jdbi);
+    }
+
     private static Jdbi createJdbi() {
-        String url = System.getenv("AID_WORKFLOW_IT_DB_URL");
-        String user = System.getenv("AID_WORKFLOW_IT_DB_USER");
+        String url = System.getenv(
+                "AID_WORKFLOW_IT_DB_URL"
+        );
+        String user = System.getenv(
+                "AID_WORKFLOW_IT_DB_USER"
+        );
         String password = System.getenv(
                 "AID_WORKFLOW_IT_DB_PASSWORD"
         );
@@ -50,16 +63,8 @@ final class JdbiAidRequestRepositoryIntegrationTest {
         return Jdbi.create(url, user, password);
     }
 
-    @BeforeAll
-    static void setUpDatabaseAccess() {
-        jdbi = createJdbi();
-
-        repository = new JdbiAidRequestRepository(jdbi);
-    }
-
     @Test
     void roundTripsReceivedRequestThroughPostgresql() {
-
         AidRequestId requestId = new AidRequestId(
                 "integration-" + UUID.randomUUID()
         );
@@ -72,10 +77,12 @@ final class JdbiAidRequestRepositoryIntegrationTest {
         );
 
         try {
-            VersionedAidRequest inserted = repository.insert(original);
+            VersionedAidRequest inserted =
+                    repository.insert(original);
 
-            VersionedAidRequest loaded = repository.findById(requestId)
-                    .orElseThrow();
+            VersionedAidRequest loaded =
+                    repository.findById(requestId)
+                            .orElseThrow();
 
             assertAll(
                     () -> assertEquals(
@@ -99,8 +106,16 @@ final class JdbiAidRequestRepositoryIntegrationTest {
                             loaded.aggregate().status()
                     ),
                     () -> assertTrue(
+                            loaded.aggregate().reservationId().isEmpty()
+                    ),
+                    () -> assertTrue(
                             loaded.aggregate()
-                                    .reservationId()
+                                    .reservationInventoryItemId()
+                                    .isEmpty()
+                    ),
+                    () -> assertTrue(
+                            loaded.aggregate()
+                                    .reservationQuantity()
                                     .isEmpty()
                     ),
                     () -> assertTrue(
@@ -140,20 +155,162 @@ final class JdbiAidRequestRepositoryIntegrationTest {
                     )
             );
         } finally {
-            jdbi.useHandle(handle ->
-                    handle.createUpdate("""
-                                    DELETE FROM aid_requests
-                                    WHERE request_id = :requestId
-                                    """)
-                            .bind("requestId", requestId.id())
-                            .execute()
+            deleteRequest(requestId);
+        }
+    }
+
+    @Test
+    void roundTripsReservationAttemptAndRetainsFactsOnFailure() {
+        AidRequestId requestId = new AidRequestId(
+                "reservation-" + UUID.randomUUID()
+        );
+
+        ReservationId reservationId =
+                ReservationId.generate();
+
+        InventoryItemId inventoryItemId =
+                new InventoryItemId(UUID.randomUUID());
+
+        ReservationFailureReason failureReason =
+                new ReservationFailureReason(
+                        "Requested inventory is unavailable"
+                );
+
+        AidRequest original = new AidRequest(
+                requestId,
+                new Location(32.7767, -96.7970),
+                NeedCategory.WATER,
+                Priority.URGENT
+        );
+
+        original.markValidated();
+        original.markMatchingStarted(
+                reservationId,
+                inventoryItemId,
+                4
+        );
+
+        try {
+            VersionedAidRequest inserted =
+                    repository.insert(original);
+
+            inserted.aggregate()
+                    .markReservationFailed(failureReason);
+
+            VersionedAidRequest updated =
+                    repository.update(inserted);
+
+            VersionedAidRequest loaded =
+                    repository.findById(requestId)
+                            .orElseThrow();
+
+            assertAll(
+                    () -> assertEquals(
+                            AidRequestStatus.RESERVATION_FAILED,
+                            loaded.aggregate().status()
+                    ),
+                    () -> assertEquals(
+                            Optional.of(reservationId),
+                            loaded.aggregate().reservationId()
+                    ),
+                    () -> assertEquals(
+                            Optional.of(inventoryItemId),
+                            loaded.aggregate()
+                                    .reservationInventoryItemId()
+                    ),
+                    () -> assertEquals(
+                            Optional.of(4),
+                            loaded.aggregate().reservationQuantity()
+                    ),
+                    () -> assertEquals(
+                            Optional.of(failureReason),
+                            loaded.aggregate()
+                                    .reservationFailureReason()
+                    ),
+                    () -> assertEquals(
+                            1L,
+                            updated.version()
+                    ),
+                    () -> assertEquals(
+                            updated.version(),
+                            loaded.version()
+                    )
             );
+        } finally {
+            deleteRequest(requestId);
+        }
+    }
+
+    @Test
+    void roundTripsReleasePendingBeforeTerminalCancellation() {
+        AidRequestId requestId = new AidRequestId(
+                "release-pending-" + UUID.randomUUID()
+        );
+
+        ReservationId reservationId =
+                ReservationId.generate();
+
+        InventoryItemId inventoryItemId =
+                new InventoryItemId(UUID.randomUUID());
+
+        CancellationReason cancellationReason =
+                new CancellationReason("Aid no longer required");
+
+        AidRequest original = new AidRequest(
+                requestId,
+                new Location(32.7767, -96.7970),
+                NeedCategory.WATER,
+                Priority.URGENT
+        );
+
+        original.markValidated();
+        original.markMatchingStarted(
+                reservationId,
+                inventoryItemId,
+                4
+        );
+        original.markReserved();
+
+        try {
+            VersionedAidRequest inserted =
+                    repository.insert(original);
+
+            inserted.aggregate().markReleasePending(
+                    cancellationReason
+            );
+
+            VersionedAidRequest updated =
+                    repository.update(inserted);
+
+            VersionedAidRequest loaded =
+                    repository.findById(requestId)
+                            .orElseThrow();
+
+            assertAll(
+                    () -> assertEquals(
+                            AidRequestStatus.RELEASE_PENDING,
+                            loaded.aggregate().status()
+                    ),
+                    () -> assertEquals(
+                            Optional.of(reservationId),
+                            loaded.aggregate().reservationId()
+                    ),
+                    () -> assertEquals(
+                            Optional.of(cancellationReason),
+                            loaded.aggregate().cancellationReason()
+                    ),
+                    () -> assertEquals(
+                            1L,
+                            updated.version()
+                    )
+            );
+        } finally {
+            deleteRequest(requestId);
         }
     }
 
     @Test
     void rejectsStaleUpdateWithoutOverwritingWinner() {
-
         AidRequestId requestId = new AidRequestId(
                 "concurrency-" + UUID.randomUUID()
         );
@@ -230,14 +387,7 @@ final class JdbiAidRequestRepositoryIntegrationTest {
                     )
             );
         } finally {
-            jdbi.useHandle(handle ->
-                    handle.createUpdate("""
-                                DELETE FROM aid_requests
-                                WHERE request_id = :requestId
-                                """)
-                            .bind("requestId", requestId.id())
-                            .execute()
-            );
+            deleteRequest(requestId);
         }
     }
 
@@ -275,10 +425,6 @@ final class JdbiAidRequestRepositoryIntegrationTest {
                 );
             }
 
-            /*
-             * Give all three rows the same primary ordering value -> createdAt.
-             * This forces request_id to act as the tie-breaker.
-             */
             jdbi.useHandle(handle -> {
                 for (AidRequestId requestId : requestIds) {
                     handle.createUpdate("""
@@ -346,24 +492,26 @@ final class JdbiAidRequestRepositoryIntegrationTest {
                     )
             );
         } finally {
-            jdbi.useHandle(handle -> {
-                for (AidRequestId requestId : requestIds) {
-                    handle.createUpdate("""
-                                DELETE FROM aid_requests
-                                WHERE request_id = :requestId
-                                """)
-                            .bind(
-                                    "requestId",
-                                    requestId.id()
-                            )
-                            .execute();
-                }
-            });
+            for (AidRequestId requestId : requestIds) {
+                deleteRequest(requestId);
+            }
         }
+    }
+
+    private static void deleteRequest(
+            AidRequestId requestId
+    ) {
+        jdbi.useHandle(handle ->
+                handle.createUpdate("""
+                            DELETE FROM aid_requests
+                            WHERE request_id = :requestId
+                            """)
+                        .bind("requestId", requestId.id())
+                        .execute()
+        );
     }
 
     private static boolean isPresent(String value) {
         return value != null && !value.isBlank();
     }
 }
-

@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import org.ruralaid.logistics.domain.ReservationOutcome;
+import org.ruralaid.logistics.domain.ReleaseOutcome;
 import org.ruralaid.logistics.domain.ReserveInventory;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -66,7 +67,7 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
 
         ReserveInventory command = new ReserveInventory(
                 reservationId,
-                UUID.randomUUID(),
+                UUID.randomUUID().toString(),
                 inventoryItemId,
                 4
         );
@@ -130,14 +131,14 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
 
         ReserveInventory firstCommand = new ReserveInventory(
                 reservationId,
-                UUID.randomUUID(),
+                UUID.randomUUID().toString(),
                 inventoryItemId,
                 4
         );
 
         ReserveInventory changedCommand = new ReserveInventory(
                 reservationId,
-                UUID.randomUUID(),
+                UUID.randomUUID().toString(),
                 inventoryItemId,
                 4
         );
@@ -202,7 +203,7 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
 
         ReserveInventory command = new ReserveInventory(
                 reservationId,
-                UUID.randomUUID(),
+                UUID.randomUUID().toString(),
                 inventoryItemId,
                 4
         );
@@ -268,7 +269,7 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
 
         insertReservationFixture(
                 reservationId,
-                UUID.randomUUID(),
+                UUID.randomUUID().toString(),
                 inventoryItemId,
                 2
         );
@@ -276,7 +277,7 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
         try {
             ReserveInventory command = new ReserveInventory(
                     reservationId,
-                    UUID.randomUUID(),
+                    UUID.randomUUID().toString(),
                     inventoryItemId,
                     3
             );
@@ -324,7 +325,7 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
         ReserveInventory firstCommand =
                 new ReserveInventory(
                         firstReservationId,
-                        UUID.randomUUID(),
+                        UUID.randomUUID().toString(),
                         inventoryItemId,
                         4
                 );
@@ -332,7 +333,7 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
         ReserveInventory secondCommand =
                 new ReserveInventory(
                         secondReservationId,
-                        UUID.randomUUID(),
+                        UUID.randomUUID().toString(),
                         inventoryItemId,
                         4
                 );
@@ -438,7 +439,7 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
         ReserveInventory command =
                 new ReserveInventory(
                         reservationId,
-                        UUID.randomUUID(),
+                        UUID.randomUUID().toString(),
                         inventoryItemId,
                         4
                 );
@@ -492,6 +493,55 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
                     inventoryItemId,
                     reservationId
             );
+        }
+    }
+
+    @Test
+    void repeatedReleaseRestoresInventoryOnlyOnce() {
+        UUID inventoryItemId = UUID.randomUUID();
+        UUID reservationId = UUID.randomUUID();
+
+        ReserveInventory command = new ReserveInventory(
+                reservationId,
+                UUID.randomUUID().toString(),
+                inventoryItemId,
+                4
+        );
+
+        insertInventory(inventoryItemId, 10);
+
+        try {
+            assertEquals(
+                    ReservationOutcome.RESERVED,
+                    repository.reserve(command)
+            );
+
+            ReleaseOutcome firstRelease =
+                    repository.release(reservationId);
+
+            ReleaseOutcome replayedRelease =
+                    repository.release(reservationId);
+
+            assertAll(
+                    () -> assertEquals(
+                            ReleaseOutcome.RELEASED,
+                            firstRelease
+                    ),
+                    () -> assertEquals(
+                            ReleaseOutcome.RELEASED,
+                            replayedRelease
+                    ),
+                    () -> assertEquals(
+                            10,
+                            availableQuantity(inventoryItemId)
+                    ),
+                    () -> assertEquals(
+                            "RELEASED",
+                            reservationStatus(reservationId)
+                    )
+            );
+        } finally {
+            deleteFixture(inventoryItemId, reservationId);
         }
     }
 
@@ -592,7 +642,7 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
 
     private static void insertReservationFixture(
             UUID reservationId,
-            UUID aidRequestId,
+            String aidRequestId,
             UUID inventoryItemId,
             int quantity
     ) {
@@ -711,6 +761,22 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
                                 """)
                         .bind("reservationId", reservationId)
                         .mapTo(int.class)
+                        .one()
+        );
+    }
+
+    private static String reservationStatus(
+            UUID reservationId
+    ) {
+        return jdbi.withHandle(handle ->
+                handle.createQuery("""
+                                SELECT status
+                                FROM inventory_reservations
+                                WHERE reservation_id =
+                                    :reservationId
+                                """)
+                        .bind("reservationId", reservationId)
+                        .mapTo(String.class)
                         .one()
         );
     }

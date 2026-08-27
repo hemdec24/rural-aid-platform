@@ -10,6 +10,8 @@ public record AidRequestResponse(
         String priority,
         String status,
         String reservationId,
+        String reservationInventoryItemId,
+        Integer reservationQuantity,
         String reservationFailureReason,
 
         String dispatchResponderReference,
@@ -27,4 +29,3 @@ public record AidRequestResponse(
         Instant createdAt
 ) {
 }
-

@@ -6,6 +6,9 @@ import io.dropwizard.core.setup.Bootstrap;
 import io.dropwizard.db.DataSourceFactory;
 import io.dropwizard.migrations.MigrationsBundle;
 
+import java.net.http.HttpClient;
+import java.time.Duration;
+
 import io.dropwizard.jdbi3.JdbiFactory;
 import org.jdbi.v3.core.Jdbi;
 
@@ -17,11 +20,10 @@ import org.ruralaid.workflow.api.exception.AidRequestStateConflictExceptionMappe
 import org.ruralaid.workflow.api.exception.AidRequestVersionConflictExceptionMapper;
 import org.ruralaid.workflow.api.exception.InvalidDomainInputExceptionMapper;
 import org.ruralaid.workflow.application.AidRequestApplicationService;
-
+import org.ruralaid.workflow.application.port.InventoryReservationPort;
+import org.ruralaid.workflow.integration.logistics.LogisticsHttpReservationAdapter;
 
 import org.ruralaid.workflow.health.AidWorkflowHealthCheck;
-
-
 
 public class AidWorkflowApplication extends Application<AidWorkflowConfiguration> {
 
@@ -47,7 +49,29 @@ public class AidWorkflowApplication extends Application<AidWorkflowConfiguration
 
         AidRequestRepository repository = new JdbiAidRequestRepository(jdbi);
 
-        AidRequestApplicationService applicationService = new AidRequestApplicationService(repository);
+        HttpClient logisticsHttpClient = HttpClient.newBuilder()
+                .connectTimeout(
+                        Duration.ofMillis(
+                                configuration.getLogisticsConnectTimeoutMillis()
+                        )
+                )
+                .build();
+
+        InventoryReservationPort inventoryReservationPort =
+                new LogisticsHttpReservationAdapter(
+                        logisticsHttpClient,
+                        environment.getObjectMapper(),
+                        configuration.getLogisticsBaseUri(),
+                        Duration.ofMillis(
+                                configuration.getLogisticsRequestTimeoutMillis()
+                        )
+                );
+
+        AidRequestApplicationService applicationService =
+                new AidRequestApplicationService(
+                        repository,
+                        inventoryReservationPort
+                );
 
         environment.jersey().register(
                 new AidRequestResource(applicationService)

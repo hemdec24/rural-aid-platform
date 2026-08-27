@@ -1,13 +1,13 @@
 package org.ruralaid.workflow.persistence;
 
 import org.jdbi.v3.core.Jdbi;
+
+import org.ruralaid.workflow.application.exception.AidRequestVersionConflictException;
 import org.ruralaid.workflow.application.model.AidRequestCursor;
 import org.ruralaid.workflow.application.model.VersionedAidRequest;
 import org.ruralaid.workflow.application.port.AidRequestRepository;
 import org.ruralaid.workflow.domain.AidRequest;
 import org.ruralaid.workflow.domain.AidRequestId;
-
-import org.ruralaid.workflow.application.exception.AidRequestVersionConflictException;
 
 import java.util.List;
 import java.util.Objects;
@@ -25,6 +25,8 @@ public final class JdbiAidRequestRepository
                 priority,
                 status,
                 reservation_id,
+                reservation_inventory_item_id,
+                reservation_quantity,
                 reservation_failure_reason,
                 dispatch_responder_reference,
                 dispatched_at,
@@ -40,6 +42,8 @@ public final class JdbiAidRequestRepository
                 :priority,
                 :status,
                 :reservationId,
+                :reservationInventoryItemId,
+                :reservationQuantity,
                 :reservationFailureReason,
                 :dispatchResponderReference,
                 :dispatchedAt,
@@ -50,65 +54,71 @@ public final class JdbiAidRequestRepository
             """;
 
     private static final String FIND_BY_ID_SQL = """
-        SELECT
-            request_id,
-            latitude,
-            longitude,
-            need_category,
-            priority,
-            status,
-            reservation_id,
-            reservation_failure_reason,
-            dispatch_responder_reference,
-            dispatched_at,
-            delivery_confirmation_reference,
-            delivered_at,
-            cancellation_reason,
-            version,
-            created_at
-        FROM aid_requests
-        WHERE request_id = :requestId
-        """;
+            SELECT
+                request_id,
+                latitude,
+                longitude,
+                need_category,
+                priority,
+                status,
+                reservation_id,
+                reservation_inventory_item_id,
+                reservation_quantity,
+                reservation_failure_reason,
+                dispatch_responder_reference,
+                dispatched_at,
+                delivery_confirmation_reference,
+                delivered_at,
+                cancellation_reason,
+                version,
+                created_at
+            FROM aid_requests
+            WHERE request_id = :requestId
+            """;
 
     private static final String UPDATE_SQL = """
-        UPDATE aid_requests
-        SET
-            latitude = :latitude,
-            longitude = :longitude,
-            need_category = :needCategory,
-            priority = :priority,
-            status = :status,
-            reservation_id = :reservationId,
-            reservation_failure_reason =
-                :reservationFailureReason,
-            dispatch_responder_reference =
-                :dispatchResponderReference,
-            dispatched_at = :dispatchedAt,
-            delivery_confirmation_reference =
-                :deliveryConfirmationReference,
-            delivered_at = :deliveredAt,
-            cancellation_reason = :cancellationReason,
-            version = version + 1
-        WHERE request_id = :requestId
-          AND version = :expectedVersion
-        RETURNING *
-        """;
+            UPDATE aid_requests
+            SET
+                latitude = :latitude,
+                longitude = :longitude,
+                need_category = :needCategory,
+                priority = :priority,
+                status = :status,
+                reservation_id = :reservationId,
+                reservation_inventory_item_id =
+                    :reservationInventoryItemId,
+                reservation_quantity =
+                    :reservationQuantity,
+                reservation_failure_reason =
+                    :reservationFailureReason,
+                dispatch_responder_reference =
+                    :dispatchResponderReference,
+                dispatched_at = :dispatchedAt,
+                delivery_confirmation_reference =
+                    :deliveryConfirmationReference,
+                delivered_at = :deliveredAt,
+                cancellation_reason = :cancellationReason,
+                version = version + 1
+            WHERE request_id = :requestId
+              AND version = :expectedVersion
+            RETURNING *
+            """;
 
     private static final String LIST_FIRST_PAGE_SQL = """
-        SELECT *
-        FROM aid_requests
-        ORDER BY created_at DESC, request_id DESC
-        LIMIT :limit
-        """;
+            SELECT *
+            FROM aid_requests
+            ORDER BY created_at DESC, request_id DESC
+            LIMIT :limit
+            """;
 
     private static final String LIST_AFTER_CURSOR_SQL = """
-        SELECT *
-        FROM aid_requests
-        WHERE (created_at, request_id)
-            < (:cursorCreatedAt, :cursorRequestId)
-        ORDER BY created_at DESC, request_id DESC
-        LIMIT :limit
-        """;
+            SELECT *
+            FROM aid_requests
+            WHERE (created_at, request_id)
+                < (:cursorCreatedAt, :cursorRequestId)
+            ORDER BY created_at DESC, request_id DESC
+            LIMIT :limit
+            """;
 
     private final Jdbi jdbi;
 
@@ -120,7 +130,9 @@ public final class JdbiAidRequestRepository
     }
 
     @Override
-    public VersionedAidRequest insert(AidRequest aidRequest) {
+    public VersionedAidRequest insert(
+            AidRequest aidRequest
+    ) {
         Objects.requireNonNull(
                 aidRequest,
                 "Aid request must not be null"
@@ -158,6 +170,16 @@ public final class JdbiAidRequestRepository
                                         .map(value -> value.id())
                         )
                         .bind(
+                                "reservationInventoryItemId",
+                                aidRequest
+                                        .reservationInventoryItemId()
+                                        .map(value -> value.id())
+                        )
+                        .bind(
+                                "reservationQuantity",
+                                aidRequest.reservationQuantity()
+                        )
+                        .bind(
                                 "reservationFailureReason",
                                 aidRequest.reservationFailureReason()
                                         .map(value -> value.reason())
@@ -172,7 +194,9 @@ public final class JdbiAidRequestRepository
                         .bind(
                                 "dispatchedAt",
                                 aidRequest.dispatchDetails()
-                                        .map(value -> value.dispatchedAt())
+                                        .map(value ->
+                                                value.dispatchedAt()
+                                        )
                         )
                         .bind(
                                 "deliveryConfirmationReference",
@@ -184,7 +208,9 @@ public final class JdbiAidRequestRepository
                         .bind(
                                 "deliveredAt",
                                 aidRequest.deliveryDetails()
-                                        .map(value -> value.deliveredAt())
+                                        .map(value ->
+                                                value.deliveredAt()
+                                        )
                         )
                         .bind(
                                 "cancellationReason",
@@ -205,6 +231,7 @@ public final class JdbiAidRequestRepository
                 requestId,
                 "Aid request ID must not be null"
         );
+
         return jdbi.withHandle(handle ->
                 handle.createQuery(FIND_BY_ID_SQL)
                         .bind("requestId", requestId.id())
@@ -257,8 +284,19 @@ public final class JdbiAidRequestRepository
                                                 .map(value -> value.id())
                                 )
                                 .bind(
+                                        "reservationInventoryItemId",
+                                        aidRequest
+                                                .reservationInventoryItemId()
+                                                .map(value -> value.id())
+                                )
+                                .bind(
+                                        "reservationQuantity",
+                                        aidRequest.reservationQuantity()
+                                )
+                                .bind(
                                         "reservationFailureReason",
-                                        aidRequest.reservationFailureReason()
+                                        aidRequest
+                                                .reservationFailureReason()
                                                 .map(value -> value.reason())
                                 )
                                 .bind(
@@ -335,7 +373,8 @@ public final class JdbiAidRequestRepository
             );
         }
 
-        AidRequestCursor cursorValue = cursor.orElseThrow();
+        AidRequestCursor cursorValue =
+                cursor.orElseThrow();
 
         return jdbi.withHandle(handle ->
                 handle.createQuery(LIST_AFTER_CURSOR_SQL)

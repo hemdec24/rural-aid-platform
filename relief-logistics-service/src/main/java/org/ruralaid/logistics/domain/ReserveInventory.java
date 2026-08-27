@@ -5,7 +5,7 @@ import java.util.UUID;
 
 public record ReserveInventory(
         UUID reservationId,
-        UUID aidRequestId,
+        String aidRequestId,
         UUID inventoryItemId,
         int quantity
 ) {
@@ -15,10 +15,9 @@ public record ReserveInventory(
                 "Reservation ID is required"
         );
 
-        Objects.requireNonNull(
-                aidRequestId,
-                "Aid request ID is required"
-        );
+        if (aidRequestId == null || aidRequestId.isBlank()) {
+            throw new IllegalArgumentException("Aid request must not be blank");
+        }
 
         Objects.requireNonNull(
                 inventoryItemId,
