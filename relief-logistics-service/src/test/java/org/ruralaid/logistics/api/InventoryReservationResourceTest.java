@@ -50,7 +50,7 @@ final class InventoryReservationResourceTest {
     @Test
     void returnsCreatedWithoutApplyingExactRetryTwice() {
         UUID inventoryItemId = UUID.randomUUID();
-        UUID aidRequestId = UUID.randomUUID();
+        String aidRequestId = UUID.randomUUID().toString();
         UUID reservationId = UUID.randomUUID();
 
         ReserveInventoryRequest request =
@@ -116,7 +116,7 @@ final class InventoryReservationResourceTest {
     @Test
     void returnsSafeConflictWhenInventoryIsUnavailable() {
         UUID inventoryItemId = UUID.randomUUID();
-        UUID aidRequestId = UUID.randomUUID();
+        String aidRequestId = UUID.randomUUID().toString();
         UUID reservationId = UUID.randomUUID();
 
         ReserveInventoryRequest request =
@@ -181,7 +181,7 @@ final class InventoryReservationResourceTest {
     @Test
     void returnsSafeConflictWhenReservationIdIsReused() {
         UUID inventoryItemId = UUID.randomUUID();
-        UUID aidRequestId = UUID.randomUUID();
+        String aidRequestId = UUID.randomUUID().toString();
         UUID reservationId = UUID.randomUUID();
 
         ReserveInventoryRequest firstRequest =
@@ -287,7 +287,7 @@ final class InventoryReservationResourceTest {
             assertEquals(
                     Set.of(
                             "reservationId is required",
-                            "aidRequestId is required",
+                            "aidRequestId must not be blank",
                             "inventoryItemId is required",
                             "quantity must be greater than zero"
                     ),

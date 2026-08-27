@@ -66,7 +66,7 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
 
         ReserveInventory command = new ReserveInventory(
                 reservationId,
-                UUID.randomUUID(),
+                UUID.randomUUID().toString(),
                 inventoryItemId,
                 4
         );
@@ -130,14 +130,14 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
 
         ReserveInventory firstCommand = new ReserveInventory(
                 reservationId,
-                UUID.randomUUID(),
+                UUID.randomUUID().toString(),
                 inventoryItemId,
                 4
         );
 
         ReserveInventory changedCommand = new ReserveInventory(
                 reservationId,
-                UUID.randomUUID(),
+                UUID.randomUUID().toString(),
                 inventoryItemId,
                 4
         );
@@ -202,7 +202,7 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
 
         ReserveInventory command = new ReserveInventory(
                 reservationId,
-                UUID.randomUUID(),
+                UUID.randomUUID().toString(),
                 inventoryItemId,
                 4
         );
@@ -268,7 +268,7 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
 
         insertReservationFixture(
                 reservationId,
-                UUID.randomUUID(),
+                UUID.randomUUID().toString(),
                 inventoryItemId,
                 2
         );
@@ -276,7 +276,7 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
         try {
             ReserveInventory command = new ReserveInventory(
                     reservationId,
-                    UUID.randomUUID(),
+                    UUID.randomUUID().toString(),
                     inventoryItemId,
                     3
             );
@@ -324,7 +324,7 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
         ReserveInventory firstCommand =
                 new ReserveInventory(
                         firstReservationId,
-                        UUID.randomUUID(),
+                        UUID.randomUUID().toString(),
                         inventoryItemId,
                         4
                 );
@@ -332,7 +332,7 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
         ReserveInventory secondCommand =
                 new ReserveInventory(
                         secondReservationId,
-                        UUID.randomUUID(),
+                        UUID.randomUUID().toString(),
                         inventoryItemId,
                         4
                 );
@@ -438,7 +438,7 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
         ReserveInventory command =
                 new ReserveInventory(
                         reservationId,
-                        UUID.randomUUID(),
+                        UUID.randomUUID().toString(),
                         inventoryItemId,
                         4
                 );
@@ -592,7 +592,7 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
 
     private static void insertReservationFixture(
             UUID reservationId,
-            UUID aidRequestId,
+            String aidRequestId,
             UUID inventoryItemId,
             int quantity
     ) {

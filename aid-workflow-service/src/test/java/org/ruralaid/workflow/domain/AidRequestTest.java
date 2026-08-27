@@ -9,71 +9,106 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class AidRequestTest {
-    UUID id = UUID.randomUUID();
+
+    private static final ReservationId RESERVATION_ID =
+            new ReservationId(
+                    "00000000-0000-0000-0000-000000000001"
+            );
+
+    private static final InventoryItemId INVENTORY_ITEM_ID =
+            new InventoryItemId(
+                    UUID.fromString(
+                            "00000000-0000-0000-0000-000000000101"
+                    )
+            );
+
+    private static final int QUANTITY = 4;
 
     @Test
     void newAidRequestBeginsInReceivedState() {
+        AidRequest aidRequest = newAidRequest();
 
-        AidRequest aidRequest = new AidRequest(
-                new AidRequestId("AR-01"),
-                new Location(0.0, 0.0),
-                NeedCategory.WATER,
-                Priority.STANDARD
+        assertAll(
+                () -> assertEquals(
+                        AidRequestStatus.RECEIVED,
+                        aidRequest.status()
+                ),
+                () -> assertTrue(aidRequest.reservationId().isEmpty()),
+                () -> assertTrue(
+                        aidRequest.reservationInventoryItemId().isEmpty()
+                ),
+                () -> assertTrue(
+                        aidRequest.reservationQuantity().isEmpty()
+                )
         );
-
-        assertEquals(AidRequestStatus.RECEIVED, aidRequest.status());
     }
 
     @Test
     void aidRequestRejectsMissingRequiredCreationInputs() {
-
-        IllegalArgumentException ex = assertThrows( IllegalArgumentException.class, () ->
-                new AidRequest(
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> new AidRequest(
                         null,
                         new Location(0.0, 0.0),
                         NeedCategory.WATER,
                         Priority.STANDARD
                 )
         );
-        assertEquals("Aid request ID must not be null", ex.getMessage());
 
-        ex = assertThrows( IllegalArgumentException.class, () ->
-                new AidRequest(
+        assertEquals(
+                "Aid request ID must not be null",
+                exception.getMessage()
+        );
+
+        exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> new AidRequest(
                         new AidRequestId("AR-01"),
                         null,
                         NeedCategory.WATER,
                         Priority.STANDARD
                 )
         );
-        assertEquals("Location must not be null", ex.getMessage());
 
-        ex = assertThrows( IllegalArgumentException.class, () ->
-                new AidRequest(
+        assertEquals(
+                "Location must not be null",
+                exception.getMessage()
+        );
+
+        exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> new AidRequest(
                         new AidRequestId("AR-01"),
                         new Location(0.0, 0.0),
                         null,
                         Priority.STANDARD
                 )
         );
-        assertEquals("Need category must not be null", ex.getMessage());
 
-        ex = assertThrows( IllegalArgumentException.class, () ->
-                new AidRequest(
+        assertEquals(
+                "Need category must not be null",
+                exception.getMessage()
+        );
+
+        exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> new AidRequest(
                         new AidRequestId("AR-01"),
                         new Location(0.0, 0.0),
                         NeedCategory.WATER,
                         null
                 )
         );
-        assertEquals("Priority must not be null", ex.getMessage());
+
+        assertEquals(
+                "Priority must not be null",
+                exception.getMessage()
+        );
     }
 
     @Test
     void validRequestCanCompleteMainLifecycle() {
         AidRequest aidRequest = newAidRequest();
-
-        ReservationId reservationId =
-                new ReservationId("RSV-01");
 
         DispatchDetails dispatchDetails =
                 new DispatchDetails(
@@ -88,8 +123,12 @@ public class AidRequestTest {
                 );
 
         aidRequest.markValidated();
-        aidRequest.markMatchingStarted();
-        aidRequest.markReserved(reservationId);
+        aidRequest.markMatchingStarted(
+                RESERVATION_ID,
+                INVENTORY_ITEM_ID,
+                QUANTITY
+        );
+        aidRequest.markReserved();
         aidRequest.markDispatched(dispatchDetails);
         aidRequest.markDelivered(deliveryDetails);
         aidRequest.markCompleted();
@@ -100,8 +139,16 @@ public class AidRequestTest {
                         aidRequest.status()
                 ),
                 () -> assertEquals(
-                        Optional.of(reservationId),
+                        Optional.of(RESERVATION_ID),
                         aidRequest.reservationId()
+                ),
+                () -> assertEquals(
+                        Optional.of(INVENTORY_ITEM_ID),
+                        aidRequest.reservationInventoryItemId()
+                ),
+                () -> assertEquals(
+                        Optional.of(QUANTITY),
+                        aidRequest.reservationQuantity()
                 ),
                 () -> assertEquals(
                         Optional.of(dispatchDetails),
@@ -120,8 +167,10 @@ public class AidRequestTest {
 
         assertThrows(
                 IllegalStateException.class,
-                () -> aidRequest.markReserved(
-                        new ReservationId("RSV-01")
+                () -> aidRequest.markMatchingStarted(
+                        RESERVATION_ID,
+                        INVENTORY_ITEM_ID,
+                        QUANTITY
                 )
         );
 
@@ -130,20 +179,43 @@ public class AidRequestTest {
                         AidRequestStatus.RECEIVED,
                         aidRequest.status()
                 ),
+                () -> assertTrue(aidRequest.reservationId().isEmpty()),
                 () -> assertTrue(
-                        aidRequest.reservationId().isEmpty()
+                        aidRequest.reservationInventoryItemId().isEmpty()
+                ),
+                () -> assertTrue(
+                        aidRequest.reservationQuantity().isEmpty()
                 )
         );
     }
 
     @Test
-    void retryingMatchingClearsPreviousFailureReason() {
+    void newMatchingAttemptReplacesAttemptFactsAndClearsFailure() {
         AidRequest aidRequest = newAidRequest();
+
+        ReservationId newReservationId =
+                new ReservationId(
+                        "00000000-0000-0000-0000-000000000002"
+                );
+
+        InventoryItemId newInventoryItemId =
+                new InventoryItemId(
+                        UUID.fromString(
+                                "00000000-0000-0000-0000-000000000102"
+                        )
+                );
+
         ReservationFailureReason reason =
-                new ReservationFailureReason("No water available");
+                new ReservationFailureReason(
+                        "No water available"
+                );
 
         aidRequest.markValidated();
-        aidRequest.markMatchingStarted();
+        aidRequest.markMatchingStarted(
+                RESERVATION_ID,
+                INVENTORY_ITEM_ID,
+                QUANTITY
+        );
         aidRequest.markReservationFailed(reason);
 
         assertAll(
@@ -152,20 +224,158 @@ public class AidRequestTest {
                         aidRequest.status()
                 ),
                 () -> assertEquals(
+                        Optional.of(RESERVATION_ID),
+                        aidRequest.reservationId()
+                ),
+                () -> assertEquals(
+                        Optional.of(INVENTORY_ITEM_ID),
+                        aidRequest.reservationInventoryItemId()
+                ),
+                () -> assertEquals(
+                        Optional.of(QUANTITY),
+                        aidRequest.reservationQuantity()
+                ),
+                () -> assertEquals(
                         Optional.of(reason),
                         aidRequest.reservationFailureReason()
                 )
         );
 
-        aidRequest.markMatchingRetried();
+        aidRequest.startNewMatchingAttempt(
+                newReservationId,
+                newInventoryItemId,
+                2
+        );
 
         assertAll(
                 () -> assertEquals(
                         AidRequestStatus.MATCH_PENDING,
                         aidRequest.status()
                 ),
+                () -> assertEquals(
+                        Optional.of(newReservationId),
+                        aidRequest.reservationId()
+                ),
+                () -> assertEquals(
+                        Optional.of(newInventoryItemId),
+                        aidRequest.reservationInventoryItemId()
+                ),
+                () -> assertEquals(
+                        Optional.of(2),
+                        aidRequest.reservationQuantity()
+                ),
                 () -> assertTrue(
                         aidRequest.reservationFailureReason().isEmpty()
+                )
+        );
+    }
+
+    @Test
+    void matchingStartStoresCompleteReservationAttempt() {
+        AidRequest aidRequest = newAidRequest();
+
+        aidRequest.markValidated();
+        aidRequest.markMatchingStarted(
+                RESERVATION_ID,
+                INVENTORY_ITEM_ID,
+                QUANTITY
+        );
+
+        assertAll(
+                () -> assertEquals(
+                        AidRequestStatus.MATCH_PENDING,
+                        aidRequest.status()
+                ),
+                () -> assertEquals(
+                        Optional.of(RESERVATION_ID),
+                        aidRequest.reservationId()
+                ),
+                () -> assertEquals(
+                        Optional.of(INVENTORY_ITEM_ID),
+                        aidRequest.reservationInventoryItemId()
+                ),
+                () -> assertEquals(
+                        Optional.of(QUANTITY),
+                        aidRequest.reservationQuantity()
+                )
+        );
+    }
+
+    @Test
+    void matchingStartRejectsInvalidAttemptWithoutChangingRequest() {
+        AidRequest aidRequest = newAidRequest();
+        aidRequest.markValidated();
+
+        assertAll(
+                () -> assertThrows(
+                        IllegalArgumentException.class,
+                        () -> aidRequest.markMatchingStarted(
+                                null,
+                                INVENTORY_ITEM_ID,
+                                QUANTITY
+                        )
+                ),
+                () -> assertThrows(
+                        IllegalArgumentException.class,
+                        () -> aidRequest.markMatchingStarted(
+                                RESERVATION_ID,
+                                null,
+                                QUANTITY
+                        )
+                ),
+                () -> assertThrows(
+                        IllegalArgumentException.class,
+                        () -> aidRequest.markMatchingStarted(
+                                RESERVATION_ID,
+                                INVENTORY_ITEM_ID,
+                                0
+                        )
+                )
+        );
+
+        assertAll(
+                () -> assertEquals(
+                        AidRequestStatus.VALIDATED,
+                        aidRequest.status()
+                ),
+                () -> assertTrue(aidRequest.reservationId().isEmpty()),
+                () -> assertTrue(
+                        aidRequest.reservationInventoryItemId().isEmpty()
+                ),
+                () -> assertTrue(
+                        aidRequest.reservationQuantity().isEmpty()
+                )
+        );
+    }
+
+    @Test
+    void reservationSuccessPreservesCompleteAttempt() {
+        AidRequest aidRequest = newAidRequest();
+
+        aidRequest.markValidated();
+        aidRequest.markMatchingStarted(
+                RESERVATION_ID,
+                INVENTORY_ITEM_ID,
+                QUANTITY
+        );
+        aidRequest.markReserved();
+
+        assertAll(
+                () -> assertEquals(
+                        AidRequestStatus.RESERVED,
+                        aidRequest.status()
+                ),
+                () -> assertEquals(
+                        Optional.of(RESERVATION_ID),
+                        aidRequest.reservationId()
+                ),
+                () -> assertEquals(
+                        Optional.of(INVENTORY_ITEM_ID),
+                        aidRequest.reservationInventoryItemId()
+                ),
+                () -> assertEquals(
+                        Optional.of(QUANTITY),
+                        aidRequest.reservationQuantity()
                 )
         );
     }
@@ -203,8 +413,11 @@ public class AidRequestTest {
     @Test
     void requestCanBeCancelledBeforeDispatch() {
         AidRequest aidRequest = newAidRequest();
+
         CancellationReason reason =
-                new CancellationReason("Aid no longer required");
+                new CancellationReason(
+                        "Aid no longer required"
+                );
 
         aidRequest.markCancelled(reason);
 
@@ -229,7 +442,9 @@ public class AidRequestTest {
         assertThrows(
                 IllegalStateException.class,
                 () -> aidRequest.markCancelled(
-                        new CancellationReason("Aid no longer required")
+                        new CancellationReason(
+                                "Aid no longer required"
+                        )
                 )
         );
 
@@ -247,6 +462,7 @@ public class AidRequestTest {
     @Test
     void terminalRequestsRejectFurtherLifecycleOperations() {
         AidRequest cancelled = newAidRequest();
+
         cancelled.markCancelled(
                 new CancellationReason("Duplicate request")
         );
@@ -254,6 +470,7 @@ public class AidRequestTest {
         AidRequest completed = dispatchedAidRequest(
                 Instant.parse("2026-08-12T15:00:00Z")
         );
+
         completed.markDelivered(
                 new DeliveryDetails(
                         "CONFIRMATION-01",
@@ -287,6 +504,7 @@ public class AidRequestTest {
     @Test
     void locationCanBeCorrectedOnlyBeforeValidation() {
         AidRequest aidRequest = newAidRequest();
+
         Location correctedLocation =
                 new Location(32.7767, -96.7970);
 
@@ -321,14 +539,18 @@ public class AidRequestTest {
         );
     }
 
-    private AidRequest dispatchedAidRequest(Instant dispatchedAt) {
+    private AidRequest dispatchedAidRequest(
+            Instant dispatchedAt
+    ) {
         AidRequest aidRequest = newAidRequest();
 
         aidRequest.markValidated();
-        aidRequest.markMatchingStarted();
-        aidRequest.markReserved(
-                new ReservationId("RSV-01")
+        aidRequest.markMatchingStarted(
+                RESERVATION_ID,
+                INVENTORY_ITEM_ID,
+                QUANTITY
         );
+        aidRequest.markReserved();
         aidRequest.markDispatched(
                 new DispatchDetails(
                         "RESPONDER-01",

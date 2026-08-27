@@ -9,6 +9,7 @@ import org.ruralaid.workflow.domain.AidRequestStatus;
 import org.ruralaid.workflow.domain.CancellationReason;
 import org.ruralaid.workflow.domain.DeliveryDetails;
 import org.ruralaid.workflow.domain.DispatchDetails;
+import org.ruralaid.workflow.domain.InventoryItemId;
 import org.ruralaid.workflow.domain.Location;
 import org.ruralaid.workflow.domain.NeedCategory;
 import org.ruralaid.workflow.domain.Priority;
@@ -18,6 +19,7 @@ import org.ruralaid.workflow.domain.ReservationId;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 public final class AidRequestRowMapper
         implements RowMapper<VersionedAidRequest> {
@@ -45,6 +47,8 @@ public final class AidRequestRowMapper
                         resultSet.getString("status")
                 ),
                 readReservationId(resultSet),
+                readInventoryItemId(resultSet),
+                readReservationQuantity(resultSet),
                 readReservationFailureReason(resultSet),
                 readDispatchDetails(resultSet),
                 readDeliveryDetails(resultSet),
@@ -83,11 +87,35 @@ public final class AidRequestRowMapper
     private ReservationId readReservationId(
             ResultSet resultSet
     ) throws SQLException {
-        String value = resultSet.getString("reservation_id");
+        String value = resultSet.getString(
+                "reservation_id"
+        );
 
         return value == null
                 ? null
                 : new ReservationId(value);
+    }
+
+    private InventoryItemId readInventoryItemId(
+            ResultSet resultSet
+    ) throws SQLException {
+        UUID value = resultSet.getObject(
+                "reservation_inventory_item_id",
+                UUID.class
+        );
+
+        return value == null
+                ? null
+                : new InventoryItemId(value);
+    }
+
+    private Integer readReservationQuantity(
+            ResultSet resultSet
+    ) throws SQLException {
+        return resultSet.getObject(
+                "reservation_quantity",
+                Integer.class
+        );
     }
 
     private ReservationFailureReason readReservationFailureReason(
@@ -170,4 +198,3 @@ public final class AidRequestRowMapper
                 : new CancellationReason(value);
     }
 }
-
