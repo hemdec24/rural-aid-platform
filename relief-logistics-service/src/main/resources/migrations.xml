@@ -228,4 +228,53 @@
 
     </changeSet>
 
+    <changeSet
+            id="005-add-idempotent-reservation-release"
+            author="hem">
+
+        <addColumn tableName="inventory_reservations">
+            <column
+                    name="status"
+                    type="TEXT"
+                    defaultValue="RESERVED">
+                <constraints nullable="false"/>
+            </column>
+
+            <column
+                    name="released_at"
+                    type="TIMESTAMP WITH TIME ZONE"/>
+        </addColumn>
+
+        <sql><![CDATA[
+            ALTER TABLE inventory_reservations
+                ADD CONSTRAINT chk_inventory_reservations_status
+                    CHECK (status IN ('RESERVED', 'RELEASED')),
+
+                ADD CONSTRAINT chk_inventory_reservations_release_complete
+                    CHECK (
+                        (status = 'RELEASED')
+                        = (released_at IS NOT NULL)
+                    );
+        ]]></sql>
+
+        <rollback>
+            <sql><![CDATA[
+                ALTER TABLE inventory_reservations
+                    DROP CONSTRAINT
+                        chk_inventory_reservations_release_complete,
+                    DROP CONSTRAINT
+                        chk_inventory_reservations_status;
+            ]]></sql>
+
+            <dropColumn
+                    tableName="inventory_reservations"
+                    columnName="released_at"/>
+
+            <dropColumn
+                    tableName="inventory_reservations"
+                    columnName="status"/>
+        </rollback>
+
+    </changeSet>
+
 </databaseChangeLog>

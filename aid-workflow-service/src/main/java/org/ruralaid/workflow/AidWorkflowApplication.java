@@ -67,7 +67,11 @@ public class AidWorkflowApplication extends Application<AidWorkflowConfiguration
                         )
                 );
 
-        AidRequestApplicationService applicationService = new AidRequestApplicationService(repository);
+        AidRequestApplicationService applicationService =
+                new AidRequestApplicationService(
+                        repository,
+                        inventoryReservationPort
+                );
 
         environment.jersey().register(
                 new AidRequestResource(applicationService)

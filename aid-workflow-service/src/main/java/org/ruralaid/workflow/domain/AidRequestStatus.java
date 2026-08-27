@@ -7,6 +7,7 @@ public enum AidRequestStatus {
     MATCH_PENDING,
     RESERVATION_FAILED,
     RESERVED,
+    RELEASE_PENDING,
     DISPATCHED,
     DELIVERED,
     COMPLETED,

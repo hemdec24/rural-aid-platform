@@ -6,7 +6,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.ruralaid.workflow.application.exception.ReservationCallException;
 import org.ruralaid.workflow.application.model.ReservationCommand;
 import org.ruralaid.workflow.application.model.ReservationResult;
+import org.ruralaid.workflow.application.model.ReleaseResult;
 import org.ruralaid.workflow.application.port.InventoryReservationPort;
+import org.ruralaid.workflow.domain.ReservationId;
 
 import java.io.IOException;
 import java.net.URI;
@@ -22,6 +24,7 @@ public final class LogisticsHttpReservationAdapter implements InventoryReservati
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
+    private final URI logisticsBaseUri;
     private final URI reservationEndpoint;
     private final Duration requestTimeout;
 
@@ -39,10 +42,13 @@ public final class LogisticsHttpReservationAdapter implements InventoryReservati
                 objectMapper,
                 "Object mapper is required"
         );
-        this.reservationEndpoint = Objects.requireNonNull(
+        this.logisticsBaseUri = Objects.requireNonNull(
                 logisticsBaseUri,
                 "Logistics base URI is required"
-        ).resolve("/inventory-reservations");
+        );
+        this.reservationEndpoint = this.logisticsBaseUri.resolve(
+                "/inventory-reservations"
+        );
         this.requestTimeout = Objects.requireNonNull(
                 requestTimeout,
                 "Request timeout is required"
@@ -88,6 +94,51 @@ public final class LogisticsHttpReservationAdapter implements InventoryReservati
         } catch (IOException exception) {
             throw new ReservationCallException(
                     "Logistics reservation call failed",
+                    exception
+            );
+        }
+    }
+
+    @Override
+    public ReleaseResult release(ReservationId reservationId) {
+        Objects.requireNonNull(
+                reservationId,
+                "Reservation ID is required"
+        );
+
+        URI releaseEndpoint = logisticsBaseUri.resolve(
+                "/inventory-reservations/"
+                        + reservationId.id()
+                        + "/release"
+        );
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(releaseEndpoint)
+                .timeout(requestTimeout)
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+
+        try {
+            HttpResponse<String> response = httpClient.send(
+                    request,
+                    HttpResponse.BodyHandlers.ofString(
+                            StandardCharsets.UTF_8
+                    )
+            );
+
+            return mapReleaseResponse(reservationId, response);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+
+            throw new ReservationCallException(
+                    "Logistics release call was interrupted",
+                    exception
+            );
+        } catch (IOException exception) {
+            throw new ReservationCallException(
+                    "Logistics release call failed",
                     exception
             );
         }
@@ -154,6 +205,43 @@ public final class LogisticsHttpReservationAdapter implements InventoryReservati
         );
     }
 
+    private ReleaseResult mapReleaseResponse(
+            ReservationId reservationId,
+            HttpResponse<String> response
+    ) {
+        if (response.statusCode() == 200) {
+            LogisticsReservationResponse body = readBody(
+                    response.body(),
+                    LogisticsReservationResponse.class
+            );
+
+            if (!reservationId.asUuid().equals(body.reservationId())
+                    || !"RELEASED".equals(body.outcome())) {
+                throw new ReservationCallException(
+                        "Logistics returned an invalid release response"
+                );
+            }
+
+            return ReleaseResult.RELEASED;
+        }
+
+        if (response.statusCode() == 404) {
+            LogisticsErrorResponse error = readBody(
+                    response.body(),
+                    LogisticsErrorResponse.class
+            );
+
+            if ("RESERVATION_NOT_FOUND".equals(error.code())) {
+                return ReleaseResult.NOT_FOUND;
+            }
+        }
+
+        throw new ReservationCallException(
+                "Unexpected Logistics release response status: "
+                        + response.statusCode()
+        );
+    }
+
     private <T> T readBody(String body, Class<T> responseType) {
         try {
             return objectMapper.readValue(body, responseType);
@@ -185,4 +273,3 @@ public final class LogisticsHttpReservationAdapter implements InventoryReservati
     ) {
     }
 }
-

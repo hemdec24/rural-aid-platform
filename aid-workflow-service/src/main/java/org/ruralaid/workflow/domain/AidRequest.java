@@ -169,6 +169,13 @@ public final class AidRequest {
                             && deliveryDetails == null
                             && cancellationReason == null;
 
+            case RELEASE_PENDING ->
+                    hasCompleteReservationAttempt
+                            && reservationFailureReason == null
+                            && dispatchDetails == null
+                            && deliveryDetails == null
+                            && cancellationReason != null;
+
             case RESERVATION_FAILED ->
                     hasCompleteReservationAttempt
                             && reservationFailureReason != null
@@ -342,6 +349,33 @@ public final class AidRequest {
         this.status = AidRequestStatus.RESERVED;
     }
 
+    public void markReleasePending(
+            CancellationReason reason
+    ) {
+        requireStatus(
+                AidRequestStatus.RESERVED,
+                "begin reservation release"
+        );
+
+        if (reason == null) {
+            throw new IllegalArgumentException(
+                    "Cancellation reason must not be null"
+            );
+        }
+
+        this.cancellationReason = reason;
+        this.status = AidRequestStatus.RELEASE_PENDING;
+    }
+
+    public void markReleasedAndCancelled() {
+        requireStatus(
+                AidRequestStatus.RELEASE_PENDING,
+                "complete cancellation after reservation release"
+        );
+
+        this.status = AidRequestStatus.CANCELLED;
+    }
+
     public void markReservationFailed(
             ReservationFailureReason reason
     ) {
@@ -485,9 +519,7 @@ public final class AidRequest {
             case RECEIVED,
                  REQUIRES_REVIEW,
                  VALIDATED,
-                 MATCH_PENDING,
-                 RESERVATION_FAILED,
-                 RESERVED -> true;
+                 RESERVATION_FAILED -> true;
 
             default -> false;
         };

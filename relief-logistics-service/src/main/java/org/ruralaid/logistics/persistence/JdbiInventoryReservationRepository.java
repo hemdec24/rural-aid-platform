@@ -1,6 +1,7 @@
 package org.ruralaid.logistics.persistence;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.jdbi.v3.core.Handle;
@@ -8,6 +9,7 @@ import org.jdbi.v3.core.Jdbi;
 
 import org.ruralaid.logistics.application.model.ReservationRequestFingerprint;
 import org.ruralaid.logistics.application.port.InventoryReservationRepository;
+import org.ruralaid.logistics.domain.ReleaseOutcome;
 import org.ruralaid.logistics.domain.ReservationOutcome;
 import org.ruralaid.logistics.domain.ReserveInventory;
 
@@ -54,6 +56,101 @@ public final class JdbiInventoryReservationRepository implements InventoryReserv
                     requestFingerprint
             );
         });
+    }
+
+    @Override
+    public ReleaseOutcome release(UUID reservationId) {
+        Objects.requireNonNull(
+                reservationId,
+                "Reservation ID is required"
+        );
+
+        return jdbi.inTransaction(handle -> {
+            Optional<ReleasedReservation> releasedReservation =
+                    handle.createQuery("""
+                            UPDATE inventory_reservations
+                            SET status = 'RELEASED',
+                                released_at = CURRENT_TIMESTAMP
+                            WHERE reservation_id = :reservationId
+                              AND status = 'RESERVED'
+                            RETURNING inventory_item_id, quantity
+                            """)
+                            .bind("reservationId", reservationId)
+                            .map((resultSet, context) ->
+                                    new ReleasedReservation(
+                                            resultSet.getObject(
+                                                    "inventory_item_id",
+                                                    UUID.class
+                                            ),
+                                            resultSet.getInt("quantity")
+                                    )
+                            )
+                            .findOne();
+
+            if (releasedReservation.isPresent()) {
+                restoreInventory(
+                        handle,
+                        reservationId,
+                        releasedReservation.orElseThrow()
+                );
+
+                return ReleaseOutcome.RELEASED;
+            }
+
+            return readReleaseReplayOutcome(handle, reservationId);
+        });
+    }
+
+    private void restoreInventory(
+            Handle handle,
+            UUID reservationId,
+            ReleasedReservation releasedReservation
+    ) {
+        int updatedRows = handle.createUpdate("""
+                UPDATE inventory_items
+                SET available_quantity = available_quantity + :quantity
+                WHERE inventory_item_id = :inventoryItemId
+                """)
+                .bind(
+                        "inventoryItemId",
+                        releasedReservation.inventoryItemId()
+                )
+                .bind("quantity", releasedReservation.quantity())
+                .execute();
+
+        if (updatedRows != 1) {
+            throw new IllegalStateException(
+                    "Released reservation inventory could not be restored; "
+                            + "reservationId=" + reservationId
+                            + ", affectedRows=" + updatedRows
+            );
+        }
+    }
+
+    private ReleaseOutcome readReleaseReplayOutcome(
+            Handle handle,
+            UUID reservationId
+    ) {
+        return handle.createQuery("""
+                SELECT status
+                FROM inventory_reservations
+                WHERE reservation_id = :reservationId
+                """)
+                .bind("reservationId", reservationId)
+                .mapTo(String.class)
+                .findOne()
+                .map(status -> {
+                    if ("RELEASED".equals(status)) {
+                        return ReleaseOutcome.RELEASED;
+                    }
+
+                    throw new IllegalStateException(
+                            "Reservation has an unsupported release state; "
+                                    + "reservationId=" + reservationId
+                                    + ", status=" + status
+                    );
+                })
+                .orElse(ReleaseOutcome.NOT_FOUND);
     }
 
     private boolean claimOperation(
@@ -307,6 +404,12 @@ public final class JdbiInventoryReservationRepository implements InventoryReserv
             String requestFingerprint,
             String operationStatus,
             String outcome
+    ) {
+    }
+
+    private record ReleasedReservation(
+            UUID inventoryItemId,
+            int quantity
     ) {
     }
 }

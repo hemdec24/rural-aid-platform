@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import org.ruralaid.logistics.domain.ReservationOutcome;
+import org.ruralaid.logistics.domain.ReleaseOutcome;
 import org.ruralaid.logistics.domain.ReserveInventory;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -495,6 +496,55 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
         }
     }
 
+    @Test
+    void repeatedReleaseRestoresInventoryOnlyOnce() {
+        UUID inventoryItemId = UUID.randomUUID();
+        UUID reservationId = UUID.randomUUID();
+
+        ReserveInventory command = new ReserveInventory(
+                reservationId,
+                UUID.randomUUID().toString(),
+                inventoryItemId,
+                4
+        );
+
+        insertInventory(inventoryItemId, 10);
+
+        try {
+            assertEquals(
+                    ReservationOutcome.RESERVED,
+                    repository.reserve(command)
+            );
+
+            ReleaseOutcome firstRelease =
+                    repository.release(reservationId);
+
+            ReleaseOutcome replayedRelease =
+                    repository.release(reservationId);
+
+            assertAll(
+                    () -> assertEquals(
+                            ReleaseOutcome.RELEASED,
+                            firstRelease
+                    ),
+                    () -> assertEquals(
+                            ReleaseOutcome.RELEASED,
+                            replayedRelease
+                    ),
+                    () -> assertEquals(
+                            10,
+                            availableQuantity(inventoryItemId)
+                    ),
+                    () -> assertEquals(
+                            "RELEASED",
+                            reservationStatus(reservationId)
+                    )
+            );
+        } finally {
+            deleteFixture(inventoryItemId, reservationId);
+        }
+    }
+
     private static List<ReservationOutcome> reserveConcurrently(
             List<ReserveInventory> commands
     ) throws Exception {
@@ -711,6 +761,22 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
                                 """)
                         .bind("reservationId", reservationId)
                         .mapTo(int.class)
+                        .one()
+        );
+    }
+
+    private static String reservationStatus(
+            UUID reservationId
+    ) {
+        return jdbi.withHandle(handle ->
+                handle.createQuery("""
+                                SELECT status
+                                FROM inventory_reservations
+                                WHERE reservation_id =
+                                    :reservationId
+                                """)
+                        .bind("reservationId", reservationId)
+                        .mapTo(String.class)
                         .one()
         );
     }

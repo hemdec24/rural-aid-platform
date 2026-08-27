@@ -10,6 +10,7 @@ import org.ruralaid.workflow.application.model.VersionedAidRequest;
 import org.ruralaid.workflow.domain.AidRequest;
 import org.ruralaid.workflow.domain.AidRequestId;
 import org.ruralaid.workflow.domain.AidRequestStatus;
+import org.ruralaid.workflow.domain.CancellationReason;
 import org.ruralaid.workflow.domain.InventoryItemId;
 import org.ruralaid.workflow.domain.Location;
 import org.ruralaid.workflow.domain.NeedCategory;
@@ -233,6 +234,74 @@ final class JdbiAidRequestRepositoryIntegrationTest {
                     () -> assertEquals(
                             updated.version(),
                             loaded.version()
+                    )
+            );
+        } finally {
+            deleteRequest(requestId);
+        }
+    }
+
+    @Test
+    void roundTripsReleasePendingBeforeTerminalCancellation() {
+        AidRequestId requestId = new AidRequestId(
+                "release-pending-" + UUID.randomUUID()
+        );
+
+        ReservationId reservationId =
+                ReservationId.generate();
+
+        InventoryItemId inventoryItemId =
+                new InventoryItemId(UUID.randomUUID());
+
+        CancellationReason cancellationReason =
+                new CancellationReason("Aid no longer required");
+
+        AidRequest original = new AidRequest(
+                requestId,
+                new Location(32.7767, -96.7970),
+                NeedCategory.WATER,
+                Priority.URGENT
+        );
+
+        original.markValidated();
+        original.markMatchingStarted(
+                reservationId,
+                inventoryItemId,
+                4
+        );
+        original.markReserved();
+
+        try {
+            VersionedAidRequest inserted =
+                    repository.insert(original);
+
+            inserted.aggregate().markReleasePending(
+                    cancellationReason
+            );
+
+            VersionedAidRequest updated =
+                    repository.update(inserted);
+
+            VersionedAidRequest loaded =
+                    repository.findById(requestId)
+                            .orElseThrow();
+
+            assertAll(
+                    () -> assertEquals(
+                            AidRequestStatus.RELEASE_PENDING,
+                            loaded.aggregate().status()
+                    ),
+                    () -> assertEquals(
+                            Optional.of(reservationId),
+                            loaded.aggregate().reservationId()
+                    ),
+                    () -> assertEquals(
+                            Optional.of(cancellationReason),
+                            loaded.aggregate().cancellationReason()
+                    ),
+                    () -> assertEquals(
+                            1L,
+                            updated.version()
                     )
             );
         } finally {

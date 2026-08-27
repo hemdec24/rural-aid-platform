@@ -59,6 +59,10 @@ public final class AidRequestApiMapper {
                 aggregate.reservationId()
                         .map(value -> value.id())
                         .orElse(null),
+                aggregate.reservationInventoryItemId()
+                        .map(value -> value.id().toString())
+                        .orElse(null),
+                aggregate.reservationQuantity().orElse(null),
                 aggregate.reservationFailureReason()
                         .map(value -> value.reason())
                         .orElse(null),
@@ -82,4 +86,3 @@ public final class AidRequestApiMapper {
         );
     }
 }
-

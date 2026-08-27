@@ -434,6 +434,41 @@ public class AidRequestTest {
     }
 
     @Test
+    void reservedRequestBecomesTerminalOnlyAfterRelease() {
+        AidRequest aidRequest = newAidRequest();
+        CancellationReason reason = new CancellationReason(
+                "Aid no longer required"
+        );
+
+        aidRequest.markValidated();
+        aidRequest.markMatchingStarted(
+                RESERVATION_ID,
+                INVENTORY_ITEM_ID,
+                QUANTITY
+        );
+        aidRequest.markReserved();
+        aidRequest.markReleasePending(reason);
+
+        assertAll(
+                () -> assertEquals(
+                        AidRequestStatus.RELEASE_PENDING,
+                        aidRequest.status()
+                ),
+                () -> assertEquals(
+                        Optional.of(reason),
+                        aidRequest.cancellationReason()
+                )
+        );
+
+        aidRequest.markReleasedAndCancelled();
+
+        assertEquals(
+                AidRequestStatus.CANCELLED,
+                aidRequest.status()
+        );
+    }
+
+    @Test
     void dispatchedRequestCannotBeCancelled() {
         AidRequest aidRequest = dispatchedAidRequest(
                 Instant.parse("2026-08-12T15:00:00Z")

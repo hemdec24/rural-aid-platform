@@ -394,4 +394,127 @@
 
     </changeSet>
 
+    <changeSet
+            id="003-add-release-pending-state"
+            author="hem">
+
+        <sql><![CDATA[
+            ALTER TABLE aid_requests
+                DROP CONSTRAINT ck_aid_requests_status,
+                DROP CONSTRAINT ck_aid_requests_reservation_allowed_state,
+                DROP CONSTRAINT ck_aid_requests_reservation_required_state,
+                DROP CONSTRAINT ck_aid_requests_cancellation_state;
+
+            ALTER TABLE aid_requests
+                ADD CONSTRAINT ck_aid_requests_status
+                    CHECK (status IN (
+                        'RECEIVED',
+                        'REQUIRES_REVIEW',
+                        'VALIDATED',
+                        'MATCH_PENDING',
+                        'RESERVATION_FAILED',
+                        'RESERVED',
+                        'RELEASE_PENDING',
+                        'DISPATCHED',
+                        'DELIVERED',
+                        'COMPLETED',
+                        'CANCELLED'
+                    )),
+
+                ADD CONSTRAINT ck_aid_requests_reservation_allowed_state
+                    CHECK (
+                        reservation_id IS NULL
+                        OR status IN (
+                            'MATCH_PENDING',
+                            'RESERVATION_FAILED',
+                            'RESERVED',
+                            'RELEASE_PENDING',
+                            'DISPATCHED',
+                            'DELIVERED',
+                            'COMPLETED',
+                            'CANCELLED'
+                        )
+                    ),
+
+                ADD CONSTRAINT ck_aid_requests_reservation_required_state
+                    CHECK (
+                        status NOT IN (
+                            'MATCH_PENDING',
+                            'RESERVATION_FAILED',
+                            'RESERVED',
+                            'RELEASE_PENDING',
+                            'DISPATCHED',
+                            'DELIVERED',
+                            'COMPLETED'
+                        )
+                        OR reservation_id IS NOT NULL
+                    ),
+
+                ADD CONSTRAINT ck_aid_requests_cancellation_state
+                    CHECK (
+                        (status IN ('RELEASE_PENDING', 'CANCELLED'))
+                        = (cancellation_reason IS NOT NULL)
+                    );
+        ]]></sql>
+
+        <rollback>
+            <sql><![CDATA[
+                ALTER TABLE aid_requests
+                    DROP CONSTRAINT ck_aid_requests_status,
+                    DROP CONSTRAINT ck_aid_requests_reservation_allowed_state,
+                    DROP CONSTRAINT ck_aid_requests_reservation_required_state,
+                    DROP CONSTRAINT ck_aid_requests_cancellation_state;
+
+                ALTER TABLE aid_requests
+                    ADD CONSTRAINT ck_aid_requests_status
+                        CHECK (status IN (
+                            'RECEIVED',
+                            'REQUIRES_REVIEW',
+                            'VALIDATED',
+                            'MATCH_PENDING',
+                            'RESERVATION_FAILED',
+                            'RESERVED',
+                            'DISPATCHED',
+                            'DELIVERED',
+                            'COMPLETED',
+                            'CANCELLED'
+                        )),
+
+                    ADD CONSTRAINT ck_aid_requests_reservation_allowed_state
+                        CHECK (
+                            reservation_id IS NULL
+                            OR status IN (
+                                'MATCH_PENDING',
+                                'RESERVATION_FAILED',
+                                'RESERVED',
+                                'DISPATCHED',
+                                'DELIVERED',
+                                'COMPLETED',
+                                'CANCELLED'
+                            )
+                        ),
+
+                    ADD CONSTRAINT ck_aid_requests_reservation_required_state
+                        CHECK (
+                            status NOT IN (
+                                'MATCH_PENDING',
+                                'RESERVATION_FAILED',
+                                'RESERVED',
+                                'DISPATCHED',
+                                'DELIVERED',
+                                'COMPLETED'
+                            )
+                            OR reservation_id IS NOT NULL
+                        ),
+
+                    ADD CONSTRAINT ck_aid_requests_cancellation_state
+                        CHECK (
+                            (status = 'CANCELLED')
+                            = (cancellation_reason IS NOT NULL)
+                        );
+            ]]></sql>
+        </rollback>
+
+    </changeSet>
+
 </databaseChangeLog>
