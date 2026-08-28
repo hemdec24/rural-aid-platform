@@ -88,10 +88,19 @@ public final class JdbiInventoryReservationRepository implements InventoryReserv
                             .findOne();
 
             if (releasedReservation.isPresent()) {
-                restoreInventory(
+                ReleasedReservation reservation =
+                        releasedReservation.orElseThrow();
+
+                long inventoryVersion = restoreInventory(
                         handle,
                         reservationId,
-                        releasedReservation.orElseThrow()
+                        reservation
+                );
+
+                insertCacheEvent(
+                        handle,
+                        reservation.inventoryItemId(),
+                        inventoryVersion
                 );
 
                 return ReleaseOutcome.RELEASED;
@@ -101,30 +110,54 @@ public final class JdbiInventoryReservationRepository implements InventoryReserv
         });
     }
 
-    private void restoreInventory(
+    @Override
+    public Optional<UUID> findInventoryItemIdForReservation(
+            UUID reservationId
+    ) {
+        Objects.requireNonNull(
+                reservationId,
+                "Reservation ID is required"
+        );
+
+        return jdbi.withHandle(handle ->
+                handle.createQuery("""
+                        SELECT inventory_item_id
+                        FROM inventory_reservations
+                        WHERE reservation_id = :reservationId
+                        """)
+                        .bind("reservationId", reservationId)
+                        .mapTo(UUID.class)
+                        .findOne()
+        );
+    }
+
+    private long restoreInventory(
             Handle handle,
             UUID reservationId,
             ReleasedReservation releasedReservation
     ) {
-        int updatedRows = handle.createUpdate("""
+        Optional<Long> updatedInventoryVersion =
+                handle.createQuery("""
                 UPDATE inventory_items
-                SET available_quantity = available_quantity + :quantity
+                SET available_quantity = available_quantity + :quantity,
+                    version = version + 1
                 WHERE inventory_item_id = :inventoryItemId
+                RETURNING version
                 """)
                 .bind(
                         "inventoryItemId",
                         releasedReservation.inventoryItemId()
                 )
                 .bind("quantity", releasedReservation.quantity())
-                .execute();
+                .mapTo(Long.class)
+                .findOne();
 
-        if (updatedRows != 1) {
-            throw new IllegalStateException(
+        return updatedInventoryVersion.orElseThrow(
+                () -> new IllegalStateException(
                     "Released reservation inventory could not be restored; "
                             + "reservationId=" + reservationId
-                            + ", affectedRows=" + updatedRows
-            );
-        }
+                )
+        );
     }
 
     private ReleaseOutcome readReleaseReplayOutcome(
@@ -242,21 +275,25 @@ public final class JdbiInventoryReservationRepository implements InventoryReserv
             ReserveInventory command,
             String requestFingerprint
     ) {
-        int updatedRows = handle.createUpdate("""
-                UPDATE inventory_items
-                SET available_quantity =
-                    available_quantity - :quantity
-                WHERE inventory_item_id = :inventoryItemId
-                  AND available_quantity >= :quantity
-                """)
-                .bind(
-                        "inventoryItemId",
-                        command.inventoryItemId()
-                )
-                .bind("quantity", command.quantity())
-                .execute();
+        Optional<Long> updatedInventoryVersion =
+                handle.createQuery("""
+                        UPDATE inventory_items
+                        SET available_quantity =
+                                available_quantity - :quantity,
+                            version = version + 1
+                        WHERE inventory_item_id = :inventoryItemId
+                          AND available_quantity >= :quantity
+                        RETURNING version
+                        """)
+                        .bind(
+                                "inventoryItemId",
+                                command.inventoryItemId()
+                        )
+                        .bind("quantity", command.quantity())
+                        .mapTo(Long.class)
+                        .findOne();
 
-        if (updatedRows == 0) {
+        if (updatedInventoryVersion.isEmpty()) {
             completeOperation(
                     handle,
                     command.reservationId(),
@@ -265,16 +302,6 @@ public final class JdbiInventoryReservationRepository implements InventoryReserv
             );
 
             return ReservationOutcome.UNAVAILABLE;
-        }
-
-        if (updatedRows != 1) {
-            throw new IllegalStateException(
-                    "Unexpected inventory update count; "
-                            + "reservationId=" + command.reservationId()
-                            + ", inventoryItemId="
-                            + command.inventoryItemId()
-                            + ", affectedRows=" + updatedRows
-            );
         }
 
         insertReservation(handle, command);
@@ -286,7 +313,53 @@ public final class JdbiInventoryReservationRepository implements InventoryReserv
                 ReservationOutcome.RESERVED
         );
 
+        insertCacheEvent(
+                handle,
+                command.inventoryItemId(),
+                updatedInventoryVersion.orElseThrow()
+        );
+
         return ReservationOutcome.RESERVED;
+    }
+
+    private void insertCacheEvent(
+            Handle handle,
+            UUID inventoryItemId,
+            long inventoryVersion
+    ) {
+        long eventId = handle.createQuery("""
+                UPDATE inventory_cache_event_clock
+                SET last_event_id = last_event_id + 1
+                WHERE clock_id = 1
+                RETURNING last_event_id
+                """)
+                .mapTo(long.class)
+                .one();
+
+        int insertedRows = handle.createUpdate("""
+                INSERT INTO inventory_cache_events (
+                    event_id,
+                    inventory_item_id,
+                    inventory_version
+                ) VALUES (
+                    :eventId,
+                    :inventoryItemId,
+                    :inventoryVersion
+                )
+                """)
+                .bind("eventId", eventId)
+                .bind("inventoryItemId", inventoryItemId)
+                .bind("inventoryVersion", inventoryVersion)
+                .execute();
+
+        if (insertedRows != 1) {
+            throw new IllegalStateException(
+                    "Unexpected inventory cache event insert count; "
+                            + "inventoryItemId=" + inventoryItemId
+                            + ", inventoryVersion=" + inventoryVersion
+                            + ", affectedRows=" + insertedRows
+            );
+        }
     }
 
     private void insertReservation(

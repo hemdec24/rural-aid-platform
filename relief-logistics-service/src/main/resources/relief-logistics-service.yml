@@ -10,6 +10,16 @@ database:
   minSize: 2
   maxSize: 8
 
+inventoryCache:
+  maximumEntries: 1000
+  positiveTtlMillis: 30000
+  negativeTtlMillis: 5000
+  consumerId: relief-logistics-local
+  pollIntervalMillis: 250
+  maximumPollStalenessMillis: 2000
+  eventBatchSize: 100
+  maximumCatchupBatches: 10
+
 server:
   applicationConnectors:
     - type: http

@@ -853,6 +853,11 @@ final class JdbiInventoryReservationRepositoryIntegrationTest {
             handle.createUpdate("""
                     DELETE FROM inventory_items
                     WHERE inventory_item_id = :inventoryItemId
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM inventory_cache_events
+                          WHERE inventory_item_id = :inventoryItemId
+                      )
                     """)
                     .bind("inventoryItemId", inventoryItemId)
                     .execute();
