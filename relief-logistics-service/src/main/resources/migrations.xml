@@ -277,4 +277,141 @@
 
     </changeSet>
 
+    <changeSet
+            id="006-add-durable-inventory-cache-coherence"
+            author="hem">
+
+        <addColumn tableName="inventory_items">
+            <column
+                    name="version"
+                    type="BIGINT"
+                    defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+
+        <createTable tableName="inventory_cache_event_clock">
+            <column name="clock_id" type="SMALLINT">
+                <constraints
+                        nullable="false"
+                        primaryKey="true"
+                        primaryKeyName="pk_inventory_cache_event_clock"/>
+            </column>
+
+            <column
+                    name="last_event_id"
+                    type="BIGINT"
+                    defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <insert tableName="inventory_cache_event_clock">
+            <column name="clock_id" valueNumeric="1"/>
+            <column name="last_event_id" valueNumeric="0"/>
+        </insert>
+
+        <createTable tableName="inventory_cache_events">
+            <column
+                    name="event_id"
+                    type="BIGINT">
+                <constraints
+                        nullable="false"
+                        primaryKey="true"
+                        primaryKeyName="pk_inventory_cache_events"/>
+            </column>
+
+            <column name="inventory_item_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="inventory_version" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+
+            <column
+                    name="created_at"
+                    type="TIMESTAMP WITH TIME ZONE"
+                    defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createTable tableName="inventory_cache_consumer_cursors">
+            <column name="consumer_id" type="TEXT">
+                <constraints
+                        nullable="false"
+                        primaryKey="true"
+                        primaryKeyName="pk_inventory_cache_consumer_cursors"/>
+            </column>
+
+            <column
+                    name="last_event_id"
+                    type="BIGINT"
+                    defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+
+            <column
+                    name="updated_at"
+                    type="TIMESTAMP WITH TIME ZONE"
+                    defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addUniqueConstraint
+                tableName="inventory_cache_events"
+                columnNames="inventory_item_id, inventory_version"
+                constraintName="uq_inventory_cache_events_item_version"/>
+
+        <addForeignKeyConstraint
+                constraintName="fk_inventory_cache_events_inventory_item"
+                baseTableName="inventory_cache_events"
+                baseColumnNames="inventory_item_id"
+                referencedTableName="inventory_items"
+                referencedColumnNames="inventory_item_id"
+                onDelete="RESTRICT"/>
+
+        <sql><![CDATA[
+            ALTER TABLE inventory_items
+                ADD CONSTRAINT chk_inventory_items_version
+                    CHECK (version >= 0);
+
+            ALTER TABLE inventory_cache_events
+                ADD CONSTRAINT chk_inventory_cache_events_version
+                    CHECK (inventory_version > 0);
+
+            ALTER TABLE inventory_cache_event_clock
+                ADD CONSTRAINT chk_inventory_cache_event_clock_singleton
+                    CHECK (clock_id = 1),
+
+                ADD CONSTRAINT chk_inventory_cache_event_clock_value
+                    CHECK (last_event_id >= 0);
+
+            ALTER TABLE inventory_cache_consumer_cursors
+                ADD CONSTRAINT chk_inventory_cache_cursors_consumer_id
+                    CHECK (btrim(consumer_id) <> ''),
+
+                ADD CONSTRAINT chk_inventory_cache_cursors_last_event_id
+                    CHECK (last_event_id >= 0);
+        ]]></sql>
+
+        <rollback>
+            <sql><![CDATA[
+                ALTER TABLE inventory_items
+                    DROP CONSTRAINT chk_inventory_items_version;
+            ]]></sql>
+
+            <dropTable tableName="inventory_cache_consumer_cursors"/>
+            <dropTable tableName="inventory_cache_events"/>
+            <dropTable tableName="inventory_cache_event_clock"/>
+
+            <dropColumn
+                    tableName="inventory_items"
+                    columnName="version"/>
+        </rollback>
+
+    </changeSet>
+
 </databaseChangeLog>

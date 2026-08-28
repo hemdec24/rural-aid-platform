@@ -18,11 +18,21 @@ public final class ReliefLogisticsConfiguration extends Configuration {
     @JsonProperty("database")
     private DataSourceFactory database = new DataSourceFactory();
 
+    @Valid
+    @NotNull
+    @JsonProperty("inventoryCache")
+    private InventoryCacheConfiguration inventoryCache =
+            new InventoryCacheConfiguration();
+
     public String getServiceName() {
         return this.serviceName;
     }
 
     public DataSourceFactory getDataSourceFactory() {
         return this.database;
+    }
+
+    public InventoryCacheConfiguration getInventoryCache() {
+        return inventoryCache;
     }
 }

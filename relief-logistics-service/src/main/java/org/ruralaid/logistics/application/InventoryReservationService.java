@@ -6,6 +6,7 @@ import java.util.UUID;
 import org.ruralaid.logistics.application.exception.InventoryUnavailableException;
 import org.ruralaid.logistics.application.exception.ReservationIdConflictException;
 import org.ruralaid.logistics.application.port.InventoryReservationRepository;
+import org.ruralaid.logistics.application.port.InventoryCacheInvalidator;
 import org.ruralaid.logistics.domain.ReleaseOutcome;
 import org.ruralaid.logistics.domain.ReservationOutcome;
 import org.ruralaid.logistics.domain.ReserveInventory;
@@ -13,10 +14,22 @@ import org.ruralaid.logistics.domain.ReserveInventory;
 public final class InventoryReservationService {
 
     private final InventoryReservationRepository repository;
+    private final InventoryCacheInvalidator cacheInvalidator;
 
     public InventoryReservationService(InventoryReservationRepository repository) {
+        this(repository, inventoryItemId -> { });
+    }
+
+    public InventoryReservationService(
+            InventoryReservationRepository repository,
+            InventoryCacheInvalidator cacheInvalidator
+    ) {
         this.repository = Objects.requireNonNull(
                 repository, "Inventory reservation repository is required"
+        );
+        this.cacheInvalidator = Objects.requireNonNull(
+                cacheInvalidator,
+                "Inventory cache invalidator is required"
         );
     }
 
@@ -29,7 +42,10 @@ public final class InventoryReservationService {
         ReservationOutcome outcome = repository.reserve(command);
 
         return switch (outcome) {
-            case RESERVED -> command.reservationId();
+            case RESERVED -> {
+                cacheInvalidator.invalidate(command.inventoryItemId());
+                yield command.reservationId();
+            }
 
             case UNAVAILABLE ->
                     throw new InventoryUnavailableException(
@@ -51,6 +67,13 @@ public final class InventoryReservationService {
                 "Reservation ID is required"
         );
 
-        return repository.release(reservationId);
+        ReleaseOutcome outcome = repository.release(reservationId);
+
+        if (outcome == ReleaseOutcome.RELEASED) {
+            repository.findInventoryItemIdForReservation(reservationId)
+                    .ifPresent(cacheInvalidator::invalidate);
+        }
+
+        return outcome;
     }
 }
